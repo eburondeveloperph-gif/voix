@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Eburon AI • Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Firebase SDKs (Compat for single HTML file) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
+
+        :root {
+            --accent: #10b981;
+        }
+
+        body {
+            font-family: 'Inter', system_ui, -apple-system, sans-serif;
+        }
+
+        .chat-container {
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 #18181b;
+        }
+
+        .message-bubble {
+            position: relative;
+            animation: fadeInUp 0.2s ease-out forwards;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .user-bubble {
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 4px 15px -2px rgb(16 185 129 / 0.3);
+        }
+
+        .ai-bubble {
+            background-color: #27272a;
+            box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.2);
+        }
+
+        .input-container {
+            box-shadow: 0 -4px 20px -5px rgb(0 0 0 / 0.3);
+        }
+
+        .mic-button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mic-button.recording {
+            background-color: #ef4444;
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .mic-button.recording i {
+            color: white;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .typing-indicator span {
+            height: 5px;
+            width: 5px;
+            background-color: #71717a;
+            border-radius: 50%;
+            animation: typingBounce 1.2s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typingBounce {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+            }
+
+            40% {
+                transform: scale(1);
+            }
+        }
+
+        .chat-scroll {
+            scroll-behavior: smooth;
+        }
+
+        .ollama-status {
+            font-size: 10px;
+            padding: 1px 8px;
+            border-radius: 9999px;
+        }
+
+        .message-content {
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .mobile-safe {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .header-gradient {
+            background: linear-gradient(to bottom, #18181b, transparent);
+        }
+    </style>
+</head>
+
+<body class="bg-zinc-950 text-white overflow-hidden">
+    <!-- Mobile Status Bar Simulation -->
+    <div class="h-11 bg-black flex items-center justify-between px-5 text-xs font-medium text-zinc-400">
+        <div>9:41</div>
+        <div class="flex items-center gap-1">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi"></i>
+            <i class="fa-solid fa-battery-full"></i>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div
+        class="bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50 mobile-safe">
+        <div class="flex items-center gap-3">
+            <!-- Logo -->
+            <img src="https://eburon.ai/icon-eburon.svg" alt="Eburon AI"
+                class="w-9 h-9 rounded-2xl shadow-lg shadow-emerald-500/30 object-contain bg-zinc-900">
+
+            <!-- Connection Status -->
+            <div class="flex items-center gap-2">
+                <div id="connection-status"
+                    class="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-2xl text-xs font-medium">
+                    <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span>Connected</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- New Chat -->
+            <button onclick="newChat()"
+                class="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-2xl transition-colors active:scale-95">
+                <i class="fa-solid fa-plus text-lg"></i>
+            </button>
+
+            <!-- Settings -->
+            <button onclick="showSettings()"
+                class="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-2xl transition-colors active:scale-95">
+                <i class="fa-solid fa-cog text-lg"></i>
+            </button>
+
+            <!-- Model Info -->
+            <button onclick="showModelInfo()"
+                class="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 transition-colors rounded-2xl flex items-center gap-1.5 text-zinc-300">
+                <i class="fa-solid fa-microchip text-emerald-400"></i>
+                <span class="font-medium text-xs">2K</span>
+            </button>
+
+            <!-- User Profile / Auth -->
+            <button id="user-btn" onclick="showAuthModal()"
+                class="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-2xl transition-colors active:scale-95 overflow-hidden border border-zinc-700">
+                <i class="fa-solid fa-user text-lg" id="user-icon"></i>
+                <img id="user-avatar" class="hidden w-9 h-9 rounded-2xl object-cover" alt="User">
+            </button>
+        </div>
+    </div>
+
+    <!-- Chat Area -->
+    <div id="chat-container"
+        class="chat-container flex-1 overflow-y-auto px-4 pt-6 pb-32 space-y-6 bg-zinc-950 chat-scroll"
+        style="min-height: 400px;">
+        <!-- Messages injected here by JS -->
+    </div>
+
+    <!-- Input Area (Sticky Bottom) -->
+    <div
+        class="input-container bg-zinc-900 border-t border-zinc-800 px-4 py-4 sticky bottom-0 z-[60] mobile-safe shadow-[0_-4px_20px_-5px_rgb(0,0,0,0.3)]">
+        <div id="input-wrapper" class="flex items-center gap-2 bg-zinc-800 rounded-3xl px-2 py-1.5 shadow-inner">
+
+            <!-- Mic Button -->
+            <button id="mic-btn" onclick="toggleVoiceInput()"
+                class="mic-button w-11 h-11 flex-shrink-0 flex items-center justify-center text-emerald-400 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl transition-all">
+                <i class="fa-solid fa-microphone text-xl"></i>
+            </button>
+
+            <!-- Text Input -->
+            <div class="flex-1 relative">
+                <input id="message-input" type="text" placeholder="Message Eburon..."
+                    class="w-full bg-transparent text-white placeholder-zinc-500 focus:outline-none text-[15px] px-3 py-2 font-light"
+                    onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+                    autocomplete="off">
+            </div>
+
+            <!-- Send Button -->
+            <button id="send-btn" onclick="sendMessage()"
+                class="w-11 h-11 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-2xl transition-all shadow-lg shadow-emerald-500/30">
+                <i class="fa-solid fa-paper-plane text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Recording Status (hidden by default) -->
+        <div id="recording-status" class="hidden mt-3 flex items-center justify-center gap-3 text-sm">
+            <div class="flex items-center gap-2 bg-red-500/10 text-red-400 px-4 py-1.5 rounded-2xl">
+                <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                <span class="font-medium">Listening...</span>
+            </div>
+            <button onclick="stopVoiceInput()"
+                class="px-4 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 rounded-2xl transition-colors">
+                STOP
+            </button>
+        </div>
+
+        <div class="text-center mt-2">
+            <div class="text-[10px] text-zinc-500">Eburon Micro • Local • Private</div>
+        </div>
+    </div>
+
+    <!-- Model Info Modal -->
+    <div id="model-modal" onclick="hideModelInfo()"
+        class="hidden fixed inset-0 bg-black/70 z-[100] flex items-end justify-center">
+        <div onclick="event.stopImmediatePropagation()"
+            class="bg-zinc-900 w-full max-w-md rounded-t-3xl p-6 border-t border-zinc-700">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <div class="font-semibold text-xl">eburonmax/eburon-micro</div>
+                    <div class="text-emerald-400 text-sm">Latest • 991MB • 2K context</div>
+                </div>
+                <button onclick="hideModelInfo()" class="text-zinc-400 hover:text-white p-2">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div class="flex justify-between py-2 border-b border-zinc-800">
+                    <span class="text-zinc-400">Provider</span>
+                    <span class="font-medium">Ollama (Local)</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-zinc-800">
+                    <span class="text-zinc-400">Architecture</span>
+                    <span class="font-medium">Compact Transformer</span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-zinc-800">
+                    <span class="text-zinc-400">Context Window</span>
+                    <span class="font-medium">2,048 tokens</span>
+                </div>
+                <div class="flex justify-between py-2">
+                    <span class="text-zinc-400">Status</span>
+                    <span class="font-medium flex items-center gap-1.5 text-emerald-400">
+                        <i class="fa-solid fa-check-circle"></i> Ready
+                    </span>
+                </div>
+            </div>
+
+            <div class="mt-6 text-xs text-zinc-500 bg-zinc-950 p-3 rounded-2xl">
+                Powered by Eburon Inference. All conversations stay on your device.
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" onclick="hideSettings()"
+        class="hidden fixed inset-0 bg-black/70 z-[100] flex items-end justify-center">
+        <div onclick="event.stopImmediatePropagation()"
+            class="bg-zinc-900 w-full max-w-md rounded-t-3xl p-6 border-t border-zinc-700 max-h-[85vh] overflow-y-auto">
+
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-6">
+                <div class="font-semibold text-2xl">Settings</div>
+                <button onclick="hideSettings()" class="text-zinc-400 hover:text-white p-2 -mr-2">
+                    <i class="fa-solid fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <!-- Model Section -->
+            <div class="mb-8">
+                <div class="flex items-center gap-2 mb-3 px-1">
+                    <i class="fa-solid fa-robot text-emerald-400"></i>
+                    <div class="font-semibold text-lg">Eburon Model</div>
+                </div>
+
+                <div class="bg-zinc-800 rounded-2xl p-4 mb-4">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <div class="font-medium">eburonmax/eburon-micro</div>
+                            <div class="text-xs text-zinc-500 mt-0.5">Latest • 991 MB • 2K context</div>
+                        </div>
+                        <div
+                            class="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-full font-medium flex items-center gap-1">
+                            <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                            ACTIVE
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-xs text-zinc-500">Official model details available at eburon.ai</div>
+                </div>
+
+                <!-- Use Model Button -->
+                <button onclick="installModel()"
+                    class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 transition-all text-white font-semibold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30">
+                    <i class="fa-solid fa-download"></i>
+                    <span>Use Model on This Device</span>
+                </button>
+                <div class="text-center text-[10px] text-zinc-500 mt-2">Installs Eburon Inference engine + model
+                    (~991MB)</div>
+            </div>
+
+            <!-- Other Settings -->
+            <div class="space-y-6">
+                <!-- Temperature -->
+                <div>
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <div class="font-medium">Temperature</div>
+                        <div id="temp-value" class="font-mono text-emerald-400 text-sm">0.7</div>
+                    </div>
+                    <input type="range" id="temp-slider" min="0.1" max="1.0" step="0.1" value="0.7"
+                        class="w-full accent-emerald-500" oninput="updateTempValue()">
+                    <div class="flex justify-between text-[10px] text-zinc-500 px-1 mt-1">
+                        <div>Precise</div>
+                        <div>Creative</div>
+                    </div>
+                </div>
+
+                <!-- Max Tokens -->
+                <div>
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <div class="font-medium">Max Response Length</div>
+                        <div id="tokens-value" class="font-mono text-emerald-400 text-sm">1024</div>
+                    </div>
+                    <input type="range" id="tokens-slider" min="256" max="2048" step="128" value="1024"
+                        class="w-full accent-emerald-500" oninput="updateTokensValue()">
+                </div>
+
+                <div class="pt-2 border-t border-zinc-800">
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="text-zinc-400">Voice Input</div>
+                        <div class="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded text-xs font-medium">ENABLED
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 text-center">
+                <div class="text-xs text-zinc-500">Eburon AI v1.0 • All data stays on device</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Installation Loading Overlay -->
+    <div id="install-loading" class="hidden fixed inset-0 bg-black/90 z-[200] flex items-center justify-center">
+        <div class="w-full max-w-sm px-6 text-center">
+            <div class="mb-8">
+                <div
+                    class="mx-auto w-20 h-20 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin">
+                </div>
+            </div>
+
+            <div class="text-2xl font-semibold mb-2">Setting up Eburon</div>
+            <div id="install-step" class="text-emerald-400 font-medium mb-6">Requesting device permissions...</div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-zinc-800 rounded-full h-2 mb-2 overflow-hidden">
+                <div id="install-progress"
+                    class="h-2 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-300"
+                    style="width: 0%"></div>
+            </div>
+            <div class="text-xs text-zinc-500" id="install-progress-text">0% • Please wait</div>
+
+            <div class="mt-8 text-xs text-zinc-500 max-w-[260px] mx-auto">
+                This may take 2-5 minutes depending on your internet speed. Do not close this window.
+            </div>
+        </div>
+    </div>
+
+    <!-- Permission Confirmation Modal -->
+    <div id="permission-modal" onclick="hidePermissionModal()"
+        class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-6">
+        <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 rounded-3xl p-6 w-full max-w-sm">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4">
+                    <i class="fa-solid fa-shield-alt text-emerald-400 text-4xl"></i>
+                </div>
+                <div class="font-semibold text-xl mb-2">Device Permission Required</div>
+                <div class="text-sm text-zinc-400">Eburon AI needs permission to install Ollama server and download the
+                    model on your device.</div>
+            </div>
+
+            <div class="bg-zinc-800 rounded-2xl p-4 text-xs space-y-2 mb-6">
+                <div class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 w-4"></i>
+                    <span>Storage access (to save model files)</span></div>
+                <div class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 w-4"></i>
+                    <span>Network access (to download ~991MB)</span></div>
+                <div class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 w-4"></i>
+                    <span>Background processing</span></div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="hidePermissionModal()"
+                    class="flex-1 py-3 rounded-2xl border border-zinc-700 text-sm font-medium">Cancel</button>
+                <button onclick="startInstallation()"
+                    class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-2xl text-sm font-semibold">Allow
+                    &amp; Install</button>
+            </div>
+
+            <div class="text-center mt-4 text-[10px] text-zinc-500">This is a simulated installation for demo purposes.
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" onclick="hideAuthModal()"
+        class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-6">
+        <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 rounded-3xl p-6 w-full max-w-sm">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4">
+                    <i class="fa-solid fa-user-shield text-emerald-400 text-4xl"></i>
+                </div>
+                <div class="font-semibold text-xl mb-1">Sign in to Eburon</div>
+                <div class="text-sm text-zinc-400">Sync your chats &amp; memory across devices</div>
+            </div>
+
+            <!-- Google Sign In -->
+            <button onclick="signInWithGoogle()"
+                class="w-full flex items-center justify-center gap-3 py-3 bg-white text-zinc-900 hover:bg-zinc-100 font-semibold rounded-2xl mb-3 transition-all">
+                <i class="fa-brands fa-google text-red-500 text-xl"></i>
+                <span>Continue with Google</span>
+            </button>
+
+            <div class="flex items-center gap-3 my-4">
+                <div class="flex-1 h-px bg-zinc-700"></div>
+                <div class="text-xs text-zinc-500">or</div>
+                <div class="flex-1 h-px bg-zinc-700"></div>
+            </div>
+
+            <!-- Email Form -->
+            <div class="space-y-3">
+                <input id="email-input" type="email" placeholder="Email address"
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500">
+                <input id="password-input" type="password" placeholder="Password"
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500">
+
+                <div class="flex gap-3">
+                    <button onclick="signInWithEmail()"
+                        class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-2xl text-sm font-semibold">Sign
+                        In</button>
+                    <button onclick="signUpWithEmail()"
+                        class="flex-1 py-3 border border-emerald-500 hover:bg-emerald-500/10 rounded-2xl text-sm font-semibold text-emerald-400">Sign
+                        Up</button>
+                </div>
+            </div>
+
+            <div class="text-center mt-5">
+                <button onclick="hideAuthModal()" class="text-xs text-zinc-500 hover:text-zinc-400">Maybe later</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#10b981');
+        }
+
+        // Global state
+        let messages = [];
+        let isGenerating = false;
+        let isRecording = false;
+        let recognition = null;
+        let currentAssistantElement = null;
+        let currentUser = null;
+        let longTermMemory = [];
+        let firebaseApp = null;
+        let auth = null;
+        let database = null;
+
+        // Firebase Configuration (provided)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjmcE7CiKrNpSnu20gFB2cG620HU36Zqg",
+            authDomain: "gen-lang-client-0836251512.firebaseapp.com",
+            databaseURL: "https://gen-lang-client-0836251512-default-rtdb.firebaseio.com",
+            projectId: "gen-lang-client-0836251512",
+            storageBucket: "gen-lang-client-0836251512.firebasestorage.app",
+            messagingSenderId: "811711024905",
+            appId: "1:811711024905:web:65c6d67b963f9fec1b8dd8",
+            measurementId: "G-Z597RGXF9K"
+        };
+
+        // Initialize Firebase
+        function initFirebase() {
+            try {
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                database = firebase.database();
+
+                // Listen for auth state changes
+                auth.onAuthStateChanged((user) => {
+                    currentUser = user;
+                    updateUserUI(user);
+
+                    if (user) {
+                        loadUserDataFromFirebase(user.uid);
+                    } else {
+                        // Fallback to localStorage when not logged in
+                        loadMessages();
+                    }
+                });
+
+                console.log('%c[Firebase] Initialized successfully', 'color:#10b981');
+            } catch (e) {
+                console.error('Firebase init error:', e);
+            }
+        }
+
+        function updateUserUI(user) {
+            const userBtn = document.getElementById('user-btn');
+            const userIcon = document.getElementById('user-icon');
+            const userAvatar = document.getElementById('user-avatar');
+
+            if (!userBtn || !userIcon || !userAvatar) return;
+
+            if (user) {
+                userIcon.classList.add('hidden');
+                userAvatar.classList.remove('hidden');
+                userAvatar.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=10b981&color=fff`;
+                userBtn.onclick = () => showUserMenu(user);
+            } else {
+                userIcon.classList.remove('hidden');
+                userAvatar.classList.add('hidden');
+                userBtn.onclick = () => showAuthModal();
+            }
+        }
+
+        function showAuthModal() {
+            if (currentUser) {
+                showUserMenu(currentUser);
+                return;
+            }
+            document.getElementById('auth-modal').classList.remove('hidden');
+            document.getElementById('auth-modal').classList.add('flex');
+        }
+
+        function hideAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        // Google Sign In
+        async function signInWithGoogle() {
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                await auth.signInWithPopup(provider);
+                hideAuthModal();
+            } catch (error) {
+                alert("Google sign-in failed: " + error.message);
+            }
+        }
+
+        // Email Sign In
+        async function signInWithEmail() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+
+            if (!email || !password) {
+                alert("Please enter email and password");
+                return;
+            }
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                hideAuthModal();
+            } catch (error) {
+                alert("Sign in failed: " + error.message);
+            }
+        }
+
+        // Email Sign Up
+        async function signUpWithEmail() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+
+            if (!email || !password) {
+                alert("Please enter email and password");
+                return;
+            }
+            if (password.length < 6) {
+                alert("Password must be at least 6 characters");
+                return;
+            }
+
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                hideAuthModal();
+            } catch (error) {
+                alert("Sign up failed: " + error.message);
+            }
+        }
+
+        function showUserMenu(user) {
+            const menu = document.createElement('div');
+            menu.className = 'fixed inset-0 bg-black/70 z-[200] flex items-end justify-center';
+            menu.innerHTML = `
+                <div onclick="event.target.remove()" class="bg-zinc-900 w-full max-w-sm rounded-t-3xl p-6">
+                    <div class="flex items-center gap-4 mb-6">
+                        <img src="${user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=10b981&color=fff`}" 
+                             class="w-14 h-14 rounded-2xl object-cover border border-zinc-700">
+                        <div>
+                            <div class="font-semibold">${user.displayName || 'User'}</div>
+                            <div class="text-sm text-zinc-400">${user.email}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-1">
+                        <button onclick="syncDataToFirebase(); this.closest('.fixed').remove()" 
+                                class="w-full text-left px-4 py-3 hover:bg-zinc-800 rounded-2xl flex items-center gap-3 text-sm">
+                            <i class="fa-solid fa-sync w-5"></i> Sync now
+                        </button>
+                        <button onclick="signOutUser(); this.closest('.fixed').remove()" 
+                                class="w-full text-left px-4 py-3 hover:bg-zinc-800 rounded-2xl flex items-center gap-3 text-sm text-red-400">
+                            <i class="fa-solid fa-sign-out-alt w-5"></i> Sign out
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(menu);
+        }
+
+        async function signOutUser() {
+            try {
+                await auth.signOut();
+                messages = [];
+                longTermMemory = [];
+                document.getElementById('chat-container').innerHTML = '';
+                loadMessages(); // fallback to local
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Load user data (chats + long-term memory) from Firebase
+        async function loadUserDataFromFirebase(uid) {
+            try {
+                // Load long-term memory
+                const memoryRef = database.ref(`users/${uid}/longTermMemory`);
+                const memorySnap = await memoryRef.once('value');
+                longTermMemory = memorySnap.val() || [];
+
+                // Load chat history
+                const chatsRef = database.ref(`users/${uid}/chats`);
+                const chatsSnap = await chatsRef.once('value');
+                const firebaseChats = chatsSnap.val();
+
+                if (firebaseChats && firebaseChats.length > 0) {
+                    messages = firebaseChats;
+                    renderMessages();
+                } else {
+                    // First time or no chats — load local or welcome
+                    const local = localStorage.getItem('eburon_chat_history');
+                    if (local) {
+                        messages = JSON.parse(local);
+                        renderMessages();
+                    } else {
+                        addWelcomeMessage();
+                    }
+                }
+            } catch (e) {
+                console.error('Firebase load error:', e);
+                loadMessages(); // fallback
+            }
+        }
+
+        // Save chat history to Firebase (called after every message)
+        async function saveChatToFirebase() {
+            if (!currentUser) {
+                localStorage.setItem('eburon_chat_history', JSON.stringify(messages));
+                return;
+            }
+
+            try {
+                await database.ref(`users/${currentUser.uid}/chats`).set(messages);
+            } catch (e) {
+                console.error('Firebase save error:', e);
+            }
+        }
+
+        // Save long-term memory to Firebase
+        async function saveLongTermMemoryToFirebase() {
+            if (!currentUser) return;
+            try {
+                await database.ref(`users/${currentUser.uid}/longTermMemory`).set(longTermMemory);
+            } catch (e) {
+                console.error('Memory save error:', e);
+            }
+        }
+
+        // Auto-extract simple facts for long-term memory (basic version)
+        function updateLongTermMemory(userMessage, aiResponse) {
+            const combined = `${userMessage} ${aiResponse}`.toLowerCase();
+
+            // Simple keyword-based memory extraction
+            const facts = [];
+            if (combined.includes('my name is')) {
+                const match = combined.match(/my name is ([a-zA-Z]+)/);
+                if (match) facts.push(`User's name is ${match[1]}`);
+            }
+            if (combined.includes('i live in') || combined.includes('i am from')) {
+                const match = combined.match(/(?:i live in|i am from) ([a-zA-Z\s]+)/);
+                if (match) facts.push(`User lives in ${match[1].trim()}`);
+            }
+            if (combined.includes('i like') || combined.includes('my favorite')) {
+                facts.push('User shared personal preferences');
+            }
+
+            if (facts.length > 0) {
+                longTermMemory = [...new Set([...longTermMemory, ...facts])].slice(-10); // keep last 10 facts
+                saveLongTermMemoryToFirebase();
+            }
+        }
+
+        // Modified saveMessages to also save to Firebase
+        function saveMessages() {
+            localStorage.setItem('eburon_chat_history', JSON.stringify(messages));
+            saveChatToFirebase();
+        }
+
+        function loadMessages() {
+            const saved = localStorage.getItem('eburon_chat_history');
+            if (saved) {
+                messages = JSON.parse(saved);
+                renderMessages();
+            } else {
+                // First time - show welcome
+                addWelcomeMessage();
+            }
+        }
+
+        function addWelcomeMessage() {
+            const welcomeMsg = {
+                role: 'assistant',
+                content: "Hello! I'm Eburon Micro — a fast, private AI running entirely on your device. How can I help you today?",
+                timestamp: Date.now()
+            };
+            messages.push(welcomeMsg);
+            saveMessages();
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('chat-container');
+            container.innerHTML = '';
+
+            messages.forEach((msg, index) => {
+                const msgDiv = createMessageElement(msg, index);
+                container.appendChild(msgDiv);
+            });
+
+            // Scroll to bottom
+            setTimeout(() => {
+                container.scrollTop = container.scrollHeight;
+            }, 50);
+        }
+
+        function createMessageElement(msg, index) {
+            const div = document.createElement('div');
+            div.className = `flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} message-bubble`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[82%] px-4 py-3.5 rounded-3xl text-[15px] message-content shadow-sm ${msg.role === 'user'
+                    ? 'user-bubble text-white rounded-br-none'
+                    : 'ai-bubble text-zinc-100 rounded-bl-none'
+                }`;
+
+            const content = document.createElement('div');
+            content.className = 'whitespace-pre-wrap';
+            content.textContent = msg.content;
+
+            bubble.appendChild(content);
+
+            // Add copy button for AI messages
+            if (msg.role === 'assistant') {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'absolute -bottom-2 -right-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white p-1.5 rounded-full text-xs opacity-70 hover:opacity-100 transition-all';
+                copyBtn.innerHTML = '<i class="fa-solid fa-copy fa-fw fa-sm"></i>';
+                copyBtn.onclick = (e) => {
+                    e.stopImmediatePropagation();
+                    navigator.clipboard.writeText(msg.content).then(() => {
+                        const origHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fa-solid fa-check fa-fw fa-sm text-emerald-400"></i>';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = origHTML;
+                        }, 1200);
+                    });
+                };
+                bubble.style.position = 'relative';
+                bubble.appendChild(copyBtn);
+            }
+
+            // Timestamp
+            const timeDiv = document.createElement('div');
+            timeDiv.className = `text-[10px] mt-1 px-1 ${msg.role === 'user' ? 'text-right text-emerald-300/70' : 'text-left text-zinc-500'}`;
+            timeDiv.textContent = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            bubble.appendChild(timeDiv);
+
+            div.appendChild(bubble);
+            return div;
+        }
+
+        function addMessage(role, content) {
+            const msg = {
+                role,
+                content,
+                timestamp: Date.now()
+            };
+            messages.push(msg);
+            saveMessages();
+
+            const container = document.getElementById('chat-container');
+            const msgElement = createMessageElement(msg, messages.length - 1);
+            container.appendChild(msgElement);
+
+            // Smooth scroll
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+
+            return msgElement;
+        }
+
+        async function sendMessage(customText = null) {
+            const input = document.getElementById('message-input');
+            const text = customText || input.value.trim();
+
+            if (!text || isGenerating) return;
+
+            // Add user message
+            addMessage('user', text);
+
+            // Clear input
+            if (!customText) input.value = '';
+
+            // Disable input during generation
+            isGenerating = true;
+            updateInputState();
+
+            // Create assistant message placeholder
+            const container = document.getElementById('chat-container');
+            const assistantDiv = document.createElement('div');
+            assistantDiv.className = `flex justify-start message-bubble`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[82%] px-4 py-3.5 rounded-3xl text-[15px] ai-bubble text-zinc-100 rounded-bl-none shadow-sm`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'whitespace-pre-wrap message-content';
+            contentDiv.textContent = '';
+
+            bubble.appendChild(contentDiv);
+
+            // Typing indicator initially
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator mt-1';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            bubble.appendChild(typing);
+
+            assistantDiv.appendChild(bubble);
+            container.appendChild(assistantDiv);
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+
+            currentAssistantElement = contentDiv;
+
+            try {
+                // Prepare messages for Ollama (last 10 for context)
+                let recentMessages = messages.slice(-10).map(m => ({
+                    role: m.role,
+                    content: m.content
+                }));
+
+                // Add personalized long-term memory as system context
+                if (longTermMemory.length > 0) {
+                    const memoryPrompt = `User's long-term memory (use this to personalize responses): ${longTermMemory.join('. ')}`;
+                    recentMessages.unshift({ role: 'system', content: memoryPrompt });
+                }
+
+                // Add the new user message
+                recentMessages.push({ role: 'user', content: text });
+
+                // Call Ollama API with streaming
+                const response = await fetch('http://localhost:11434/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'eburonmax/eburon-micro',
+                        messages: recentMessages,
+                        stream: true,
+                        options: {
+                            temperature: 0.7,
+                            top_p: 0.9
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ollama error: ${response.status}`);
+                }
+
+                // Remove typing indicator
+                typing.remove();
+
+                let fullResponse = '';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n').filter(line => line.trim());
+
+                    for (const line of lines) {
+                        try {
+                            const data = JSON.parse(line);
+
+                            if (data.message && data.message.content) {
+                                fullResponse += data.message.content;
+                                contentDiv.textContent = fullResponse;
+
+                                // Auto-scroll while streaming
+                                container.scrollTop = container.scrollHeight;
+                            }
+
+                            if (data.done) {
+                                // Final message saved
+                                const finalMsg = {
+                                    role: 'assistant',
+                                    content: fullResponse,
+                                    timestamp: Date.now()
+                                };
+                                messages.push(finalMsg);
+                                saveMessages();
+
+                                // Update personalized long-term memory
+                                updateLongTermMemory(text, fullResponse);
+
+                                // Add copy button now that it's complete
+                                const copyBtn = document.createElement('button');
+                                copyBtn.className = 'absolute -bottom-2 -right-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white p-1.5 rounded-full text-xs opacity-70 hover:opacity-100 transition-all';
+                                copyBtn.innerHTML = '<i class="fa-solid fa-copy fa-fw fa-sm"></i>';
+                                copyBtn.onclick = (e) => {
+                                    e.stopImmediatePropagation();
+                                    navigator.clipboard.writeText(fullResponse).then(() => {
+                                        const orig = copyBtn.innerHTML;
+                                        copyBtn.innerHTML = '<i class="fa-solid fa-check fa-fw fa-sm text-emerald-400"></i>';
+                                        setTimeout(() => copyBtn.innerHTML = orig, 1200);
+                                    });
+                                };
+                                bubble.style.position = 'relative';
+                                bubble.appendChild(copyBtn);
+
+                                break;
+                            }
+                        } catch (e) {
+                            // Ignore partial JSON lines
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error('Eburon Inference error:', error);
+                typing.remove();
+
+                let errorMsg = "Sorry, I couldn't connect to Eburon. ";
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg += "Please make sure Eburon Inference is running locally: <br><code class='text-xs'>eburon inference start</code>";
+                } else {
+                    errorMsg += error.message;
+                }
+
+                contentDiv.innerHTML = `<span class="text-red-400">${errorMsg}</span>`;
+
+                // Still save error as assistant message
+                const errorResponse = {
+                    role: 'assistant',
+                    content: "I ran into a connection issue. Please ensure Eburon Inference is running locally.",
+                    timestamp: Date.now()
+                };
+                messages.push(errorResponse);
+                saveMessages();
+            } finally {
+                isGenerating = false;
+                currentAssistantElement = null;
+                updateInputState();
+            }
+        }
+
+        function updateInputState() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            const micBtn = document.getElementById('mic-btn');
+
+            if (isGenerating) {
+                input.disabled = true;
+                input.placeholder = "Eburon is thinking...";
+                sendBtn.disabled = true;
+                micBtn.disabled = true;
+            } else {
+                input.disabled = false;
+                input.placeholder = "Message Eburon...";
+                sendBtn.disabled = false;
+                micBtn.disabled = false;
+            }
+        }
+
+        // Voice Input using Deepgram nova-3
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        function toggleVoiceInput() {
+            if (isRecording) {
+                stopVoiceInput();
+            } else {
+                startVoiceInput();
+            }
+        }
+
+        async function startVoiceInput() {
+            if (isRecording || isGenerating) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    stream.getTracks().forEach(track => track.stop());
+
+                    // Show transcribing state
+                    const recordingStatus = document.getElementById('recording-status');
+                    const inputWrapper = document.getElementById('input-wrapper');
+                    recordingStatus.innerHTML = `
+                        <div class="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-4 py-1.5 rounded-2xl">
+                            <div class="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="font-medium">Transcribing with Deepgram Nova-3...</span>
+                        </div>
+                    `;
+
+                    try {
+                        const transcript = await transcribeWithDeepgram(audioBlob);
+
+                        if (transcript) {
+                            // Put transcription in the text input so user can edit before sending
+                            const input = document.getElementById('message-input');
+                            input.value = transcript;
+                            input.focus();
+
+                            // Show success toast
+                            showTranscriptionToast(transcript);
+                        } else {
+                            alert("Could not transcribe audio. Please try again.");
+                        }
+                    } catch (err) {
+                        console.error('Deepgram error:', err);
+                        alert("Transcription failed. Please check your internet connection.");
+                    } finally {
+                        // Reset UI
+                        recordingStatus.classList.add('hidden');
+                        inputWrapper.classList.remove('hidden');
+                        isRecording = false;
+                        updateMicUI();
+
+                        // Restore original recording status HTML
+                        recordingStatus.innerHTML = `
+                            <div class="flex items-center gap-2 bg-red-500/10 text-red-400 px-4 py-1.5 rounded-2xl">
+                                <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                                <span class="font-medium">Listening...</span>
+                            </div>
+                            <button onclick="stopVoiceInput()" 
+                                    class="px-4 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 rounded-2xl transition-colors">
+                                STOP
+                            </button>
+                        `;
+                    }
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+
+                // UI changes
+                const inputWrapper = document.getElementById('input-wrapper');
+                const recordingStatus = document.getElementById('recording-status');
+
+                inputWrapper.classList.add('hidden');
+                recordingStatus.classList.remove('hidden');
+
+                updateMicUI();
+
+                // Auto-stop after 60 seconds
+                setTimeout(() => {
+                    if (isRecording && mediaRecorder && mediaRecorder.state === 'recording') {
+                        stopVoiceInput();
+                    }
+                }, 60000);
+
+            } catch (err) {
+                console.error('Microphone error:', err);
+                alert("Could not access microphone. Please allow microphone permission.");
+            }
+        }
+
+        function stopVoiceInput() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        }
+
+        async function transcribeWithDeepgram(audioBlob) {
+            const DEEPGRAM_API_KEY = "edb2282b227016274897fbe12d98e24031b1ec26";
+
+            const response = await fetch('https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+                    'Content-Type': 'audio/webm'
+                },
+                body: audioBlob
+            });
+
+            if (!response.ok) {
+                throw new Error(`Deepgram API error: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() || '';
+        }
+
+        function showTranscriptionToast(transcript) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 bg-zinc-800 border border-emerald-500/30 text-white text-sm px-5 py-3 rounded-2xl shadow-xl max-w-[90%] z-[90]';
+            toast.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <i class="fa-solid fa-microphone text-emerald-400 mt-0.5"></i>
+                    <div class="flex-1">
+                        <div class="font-medium text-emerald-400 text-xs mb-0.5">TRANSCRIBED WITH DEEPGRAM NOVA-3</div>
+                        <div class="text-sm">"${transcript.length > 80 ? transcript.substring(0, 77) + '...' : transcript}"</div>
+                        <div class="text-[10px] text-zinc-500 mt-1">Edit the text above and press send</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.transition = 'all 0.4s ease';
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 400);
+            }, 3500);
+        }
+
+        function updateMicUI() {
+            const micBtn = document.getElementById('mic-btn');
+            if (isRecording) {
+                micBtn.classList.add('recording');
+                micBtn.innerHTML = '<i class="fa-solid fa-stop text-xl"></i>';
+            } else {
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '<i class="fa-solid fa-microphone text-xl"></i>';
+            }
+        }
+
+        function newChat() {
+            if (confirm('Start a new conversation?')) {
+                messages = [];
+                localStorage.removeItem('eburon_chat_history');
+                const container = document.getElementById('chat-container');
+                container.innerHTML = '';
+                addWelcomeMessage();
+            }
+        }
+
+        function showModelInfo() {
+            document.getElementById('model-modal').classList.remove('hidden');
+            document.getElementById('model-modal').classList.add('flex');
+        }
+
+        function hideModelInfo() {
+            const modal = document.getElementById('model-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                // Cmd/Ctrl + K for new chat
+                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                    e.preventDefault();
+                    newChat();
+                }
+
+                // Escape to stop recording or close modal
+                if (e.key === 'Escape') {
+                    const modelModal = document.getElementById('model-modal');
+                    const settingsModal = document.getElementById('settings-modal');
+                    const permModal = document.getElementById('permission-modal');
+                    const loading = document.getElementById('install-loading');
+
+                    if (!modelModal.classList.contains('hidden')) {
+                        hideModelInfo();
+                    } else if (!settingsModal.classList.contains('hidden')) {
+                        hideSettings();
+                    } else if (!permModal.classList.contains('hidden')) {
+                        hidePermissionModal();
+                    } else if (!loading.classList.contains('hidden')) {
+                        // Don't allow closing during install
+                    } else if (isRecording) {
+                        stopVoiceInput();
+                    }
+                }
+            });
+
+            // Auto-focus input on load (desktop)
+            setTimeout(() => {
+                const input = document.getElementById('message-input');
+                if (window.innerWidth > 768) {
+                    input.focus();
+                }
+            }, 800);
+        }
+
+        // Check Ollama connection on load (non-blocking)
+        async function checkOllamaConnection() {
+            try {
+                const res = await fetch('http://localhost:11434/api/tags', {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(2500)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const hasModel = data.models && data.models.some(m => m.name.includes('eburon'));
+
+                    updateConnectionStatus(true);
+
+                    if (!hasModel) {
+                        console.log('%c[Eburon] Model not found. Please ensure Eburon Inference is running.', 'color:#f59e0b');
+                    }
+                } else {
+                    updateConnectionStatus(false);
+                }
+            } catch (e) {
+                console.log('%c[Eburon] Ollama not reachable at localhost:11434. Make sure it is running.', 'color:#ef4444');
+                updateConnectionStatus(false);
+            }
+        }
+
+        // === NEW SETTINGS & INSTALL FUNCTIONS ===
+        let isModelInstalled = localStorage.getItem('ollama_installed') === 'true';
+
+        function showSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            // Sync sliders with current values (demo)
+            const tempSlider = document.getElementById('temp-slider');
+            const tokensSlider = document.getElementById('tokens-slider');
+            if (tempSlider) tempSlider.value = 0.7;
+            if (tokensSlider) tokensSlider.value = 1024;
+            updateTempValue();
+            updateTokensValue();
+        }
+
+        function hideSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        function updateTempValue() {
+            const slider = document.getElementById('temp-slider');
+            const valueEl = document.getElementById('temp-value');
+            if (slider && valueEl) valueEl.textContent = parseFloat(slider.value).toFixed(1);
+        }
+
+        function updateTokensValue() {
+            const slider = document.getElementById('tokens-slider');
+            const valueEl = document.getElementById('tokens-value');
+            if (slider && valueEl) valueEl.textContent = slider.value;
+        }
+
+        function installModel() {
+            hideSettings();
+            // Show permission modal first
+            const permModal = document.getElementById('permission-modal');
+            permModal.classList.remove('hidden');
+            permModal.classList.add('flex');
+        }
+
+        function hidePermissionModal() {
+            const permModal = document.getElementById('permission-modal');
+            permModal.classList.remove('flex');
+            permModal.classList.add('hidden');
+        }
+
+        function startInstallation() {
+            hidePermissionModal();
+
+            const loadingOverlay = document.getElementById('install-loading');
+            const stepEl = document.getElementById('install-step');
+            const progressBar = document.getElementById('install-progress');
+            const progressText = document.getElementById('install-progress-text');
+
+            loadingOverlay.classList.remove('hidden');
+            loadingOverlay.style.display = 'flex';
+
+            // Simulated installation steps
+            const steps = [
+                { text: "Requesting device permissions...", progress: 10, delay: 600 },
+                { text: "Downloading Eburon Inference engine...", progress: 25, delay: 900 },
+                { text: "Installing Eburon Inference (mobile layer)...", progress: 45, delay: 1100 },
+                { text: "Pulling eburonmax/eburon-micro model (991MB)...", progress: 70, delay: 1800 },
+                { text: "Configuring chatbot connection...", progress: 90, delay: 700 },
+                { text: "Finalizing setup & verifying...", progress: 100, delay: 600 }
+            ];
+
+            let currentStep = 0;
+
+            function runNextStep() {
+                if (currentStep >= steps.length) {
+                    // Installation complete
+                    setTimeout(() => {
+                        loadingOverlay.style.transition = 'opacity 0.4s';
+                        loadingOverlay.style.opacity = '0';
+
+                        setTimeout(() => {
+                            loadingOverlay.style.display = 'none';
+                            loadingOverlay.style.opacity = '1';
+                            loadingOverlay.style.transition = '';
+                            loadingOverlay.classList.add('hidden');
+
+                            // Mark as installed
+                            isModelInstalled = true;
+                            localStorage.setItem('ollama_installed', 'true');
+
+                            // Update header status
+                            updateConnectionStatus(true);
+
+                            // Success toast
+                            showSuccessToast();
+
+                            // Optional: Trigger a test connection
+                            setTimeout(() => {
+                                checkOllamaConnection();
+                            }, 800);
+                        }, 400);
+                    }, 300);
+                    return;
+                }
+
+                const step = steps[currentStep];
+                stepEl.textContent = step.text;
+                progressBar.style.width = step.progress + '%';
+                progressText.textContent = `${step.progress}% • ${currentStep + 1}/${steps.length}`;
+
+                currentStep++;
+                setTimeout(runNextStep, step.delay);
+            }
+
+            runNextStep();
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const statusEl = document.getElementById('connection-status');
+            if (!statusEl) return;
+
+            if (isConnected) {
+                statusEl.innerHTML = `
+                    <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span>Connected</span>
+                `;
+                statusEl.className = 'flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-2xl text-xs font-medium';
+            } else {
+                statusEl.innerHTML = `
+                    <div class="w-1.5 h-1.5 bg-zinc-500 rounded-full"></div>
+                    <span>Disconnected</span>
+                `;
+                statusEl.className = 'flex items-center gap-1.5 px-3 py-1 bg-zinc-800 text-zinc-400 rounded-2xl text-xs font-medium';
+            }
+        }
+
+        function showSuccessToast() {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-sm px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[90]';
+            toast.innerHTML = `
+                <i class="fa-solid fa-check-circle text-xl"></i>
+                <div>
+                    <div class="font-semibold">Installation Complete!</div>
+                    <div class="text-xs opacity-90">Eburon Micro is now ready on your device.</div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.transition = 'all 0.4s ease';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, 20px)';
+                setTimeout(() => toast.remove(), 400);
+            }, 3200);
+        }
+
+        // Main initialization
+        function initializeApp() {
+            initTailwind();
+
+            // Initialize Firebase (auth + personalized memory)
+            initFirebase();
+
+            // Load previous chat (will be overridden if user is logged in)
+            loadMessages();
+
+            // Setup voice
+            recognition = initVoiceRecognition();
+
+            // Keyboard
+            setupKeyboardShortcuts();
+
+            // Check Ollama in background
+            checkOllamaConnection();
+
+            // Update connection status
+            if (isModelInstalled) {
+                updateConnectionStatus(true);
+            }
+
+            // Welcome toast on first visit (if no history)
+            if (!localStorage.getItem('eburon_chat_history')) {
+                setTimeout(() => {
+                    const toast = document.createElement('div');
+                    toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-800 text-zinc-300 text-xs px-4 py-2 rounded-2xl shadow-xl flex items-center gap-2 z-[90]';
+                    toast.innerHTML = `
+                        <i class="fa-solid fa-info-circle text-emerald-400"></i>
+                        <span>Tip: Tap the mic to speak or type your message</span>
+                    `;
+                    document.body.appendChild(toast);
+
+                    setTimeout(() => {
+                        toast.style.transition = 'all 0.3s';
+                        toast.style.opacity = '0';
+                        setTimeout(() => toast.remove(), 300);
+                    }, 2800);
+                }, 2200);
+            }
+
+            // Make sure chat scrolls to bottom on resize (mobile keyboard)
+            window.addEventListener('resize', () => {
+                const container = document.getElementById('chat-container');
+                container.scrollTop = container.scrollHeight;
+            });
+
+            // Easter egg: click logo 5 times for fun
+            let logoClicks = 0;
+            const logo = document.querySelector('.fa-robot');
+            if (logo) {
+                logo.parentElement.addEventListener('click', () => {
+                    logoClicks++;
+                    if (logoClicks === 5) {
+                        logoClicks = 0;
+                        const container = document.getElementById('chat-container');
+                        container.innerHTML = '';
+                        addMessage('assistant', "🎉 You found the secret! Eburon is powered by pure local magic. Thanks for using me.");
+                    }
+                });
+            }
+
+            console.log('%c[Eburon Chat] Mobile-first ChatGPT-style interface initialized. Ready for local Ollama.', 'color:#10b981');
+        }
+
+        // Boot app
+        window.onload = initializeApp;
+
+        // Expose for debugging
+        window.EburonChat = { newChat, sendMessage };
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - Spreadsheet Panel</title>
+    <style>
+        /* Base Reset & Typography */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #171719; 
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        /* Layout Structure */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* =========================================
+           LEFT PANEL STRUCTURE
+           ========================================= */
+        .left-panel {
+            flex: 1;
+            position: relative;
+            background-color: #121214;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Keep spreadsheet inside */
+        }
+
+        /* --- SKELETON LOADING UI (Only on Left) --- */
+        #left-skeleton {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            background-color: #121214;
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Shimmer Animation */
+        .shimmer {
+            background: linear-gradient(90deg, #202124 25%, #3c4043 50%, #202124 75%);
+            background-size: 200% 100%;
+            animation: loadingShimmer 1.5s infinite linear;
+            border-radius: 4px;
+        }
+
+        @keyframes loadingShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Skeleton Spreadsheet Elements */
+        .skel-header-text { width: 250px; height: 28px; margin-bottom: 20px; }
+        .skel-toolbar { width: 100%; height: 40px; margin-bottom: 20px; }
+        .skel-grid { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .skel-row { display: flex; gap: 4px; height: 30px; }
+        .skel-cell { flex: 1; height: 100%; }
+        .skel-cell-small { width: 50px; height: 100%; flex-shrink: 0; }
+
+
+        /* --- ACTUAL SPREADSHEET CONTENT (Hidden initially) --- */
+        #left-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            opacity: 0; /* Starts hidden, fades in */
+            transition: opacity 0.5s ease;
+            display: flex;
+            flex-direction: column;
+            background-color: #1e1f22; /* Slightly different background for sheet container */
+        }
+
+        .sheet-header {
+            padding: 16px 24px;
+            background-color: #202124;
+            border-bottom: 1px solid #3c4043;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sheet-title {
+            font-size: 1.2rem;
+            color: #e8eaed;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sheet-icon {
+            background-color: #1e8e3e; /* Excel/Sheets green */
+            color: white;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Formula Bar */
+        .formula-bar-container {
+            display: flex;
+            align-items: center;
+            background-color: #171719;
+            border: 1px solid #3c4043;
+            border-radius: 6px;
+            padding: 4px 12px;
+            gap: 12px;
+        }
+
+        .fx-icon {
+            color: #9aa0a6;
+            font-family: serif;
+            font-style: italic;
+            font-weight: bold;
+            font-size: 14px;
+            user-select: none;
+        }
+
+        #formula-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #e8eaed;
+            font-size: 14px;
+            outline: none;
+            font-family: inherit;
+        }
+
+        /* Spreadsheet Grid */
+        .sheet-container {
+            flex: 1;
+            overflow: auto;
+            background-color: #171719;
+            position: relative;
+        }
+
+        table.spreadsheet {
+            border-collapse: collapse;
+            table-layout: fixed;
+            min-width: 100%;
+        }
+
+        th, td {
+            border: 1px solid #3c4043;
+            padding: 0;
+            margin: 0;
+            height: 30px;
+            min-width: 100px;
+            color: #e8eaed;
+            font-size: 13px;
+        }
+
+        /* Row and Column Headers */
+        th {
+            background-color: #202124;
+            color: #9aa0a6;
+            font-weight: normal;
+            text-align: center;
+            user-select: none;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        th.row-header {
+            min-width: 50px;
+            width: 50px;
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background-color: #202124;
+        }
+
+        /* Top Left empty corner */
+        th.corner-header {
+            z-index: 4;
+            left: 0;
+            top: 0;
+        }
+
+        /* Cell Styling */
+        td {
+            background-color: #171719;
+            position: relative;
+        }
+
+        .cell-content {
+            width: 100%;
+            height: 100%;
+            padding: 4px 8px;
+            outline: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Selected Cell State */
+        .cell-content:focus {
+            box-shadow: inset 0 0 0 2px #8ab4f8; /* Excel-like selection box */
+            background-color: #202124;
+            overflow: visible; /* Allow text to overflow when editing */
+            white-space: normal;
+            word-wrap: break-word;
+            z-index: 1;
+            position: absolute;
+            top: 0;
+            left: 0;
+            min-height: 100%;
+            min-width: 100%;
+            height: auto;
+        }
+
+        /* =========================================
+           RIGHT PANEL (Static, Always Visible)
+           ========================================= */
+        .right-panel {
+            width: 380px;
+            background-color: #202124;
+            border-left: 1px solid #3c4043;
+            display: flex;
+            flex-direction: column;
+            z-index: 30;
+        }
+        .rp-header {
+            padding: 24px;
+            font-size: 1.3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3c4043;
+        }
+        .close-icon { color: #9aa0a6; cursor: pointer; font-size: 1.2rem; }
+        .rp-content { padding: 24px; flex: 1; overflow-y: auto; }
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            color: #9aa0a6;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            background-color: #8ab4f8;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .checkbox::after {
+            content: '✓'; color: #202124; font-size: 12px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- LEFT PANEL (Contains Loading & Spreadsheet) -->
+        <div class="left-panel">
+            
+            <!-- 1. SKELETON LOADING (Only inside left panel) -->
+            <div id="left-skeleton">
+                <div class="shimmer skel-header-text"></div>
+                <div class="shimmer skel-toolbar"></div>
+                <div class="skel-grid">
+                    <!-- Skeleton Row Headers -->
+                    <script>
+                        for(let i=0; i<15; i++) {
+                            document.write(`
+                                <div class="skel-row">
+                                    <div class="shimmer skel-cell-small"></div>
+                                    <div class="shimmer skel-cell"></div>
+                                    <div class="shimmer skel-cell"></div>
+                                    <div class="shimmer skel-cell"></div>
+                                    <div class="shimmer skel-cell"></div>
+                                    <div class="shimmer skel-cell"></div>
+                                </div>
+                            `);
+                        }
+                    </script>
+                </div>
+            </div>
+
+            <!-- 2. ACTUAL SPREADSHEET COMPONENT (Hidden initially) -->
+            <div id="left-content">
+                <div class="sheet-header">
+                    <div class="sheet-title">
+                        <div class="sheet-icon">S</div>
+                        Project_Budget_Q3.xlsx
+                    </div>
+                    
+                    <!-- Formula Bar -->
+                    <div class="formula-bar-container">
+                        <div class="fx-icon">fx</div>
+                        <input type="text" id="formula-input" placeholder="Select a cell..." autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Spreadsheet Grid -->
+                <div class="sheet-container">
+                    <table class="spreadsheet" id="spreadsheet">
+                        <!-- Table structure will be generated by JS to keep HTML clean -->
+                    </table>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- RIGHT PANEL (Static & always visible) -->
+        <div class="right-panel">
+            <div class="rp-header">
+                <span>Settings</span>
+                <span class="close-icon">&#10005;</span>
+            </div>
+            <div class="rp-content">
+                <div class="setting-item"><div class="checkbox"></div> gmail_list_messages</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_get_message</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_send_email</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_delete_message</div>
+                <div class="setting-item"><div class="checkbox"></div> drive_list_files</div>
+                <div class="setting-item"><div class="checkbox"></div> drive_create_file</div>
+                <div class="setting-item"><div class="checkbox"></div> sheets_create</div>
+                <div class="setting-item"><div class="checkbox"></div> sheets_update_cell</div>
+                <div class="setting-item"><div class="checkbox"></div> slides_create</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // --- 1. Loading Simulation Logic ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const leftSkeleton = document.getElementById('left-skeleton');
+            const leftContent = document.getElementById('left-content');
+
+            // Simulate a 3-second network fetch/load time ONLY for the left side
+            setTimeout(() => {
+                leftSkeleton.style.opacity = '0';
+                setTimeout(() => {
+                    leftSkeleton.style.display = 'none';
+                    leftContent.style.opacity = '1';
+                }, 500);
+            }, 3000); 
+            
+            // Generate Spreadsheet Grid on load
+            generateSpreadsheet(20, 15); // 20 rows, 15 columns
+            populateDummyData();
+        });
+
+        // --- 2. Spreadsheet Logic ---
+        const spreadsheetTable = document.getElementById('spreadsheet');
+        const formulaInput = document.getElementById('formula-input');
+        let activeCell = null;
+
+        // Convert index to Column Letter (0 -> A, 1 -> B, 26 -> AA)
+        function getColumnLetter(colIndex) {
+            let temp, letter = '';
+            while (colIndex >= 0) {
+                temp = colIndex % 26;
+                letter = String.fromCharCode(temp + 65) + letter;
+                colIndex = (colIndex - temp) / 26 - 1;
+            }
+            return letter;
+        }
+
+        // Generate the Grid
+        function generateSpreadsheet(rows, cols) {
+            let thead = document.createElement('thead');
+            let tbody = document.createElement('tbody');
+
+            // --- Generate Header Row (A, B, C...) ---
+            let headerRow = document.createElement('tr');
+            // Top-left empty corner
+            let cornerTh = document.createElement('th');
+            cornerTh.className = 'row-header corner-header';
+            headerRow.appendChild(cornerTh);
+
+            for (let c = 0; c < cols; c++) {
+                let th = document.createElement('th');
+                th.innerText = getColumnLetter(c);
+                headerRow.appendChild(th);
+            }
+            thead.appendChild(headerRow);
+
+            // --- Generate Data Rows (1, 2, 3...) ---
+            for (let r = 1; r <= rows; r++) {
+                let tr = document.createElement('tr');
+                
+                // Row Number Header
+                let th = document.createElement('th');
+                th.className = 'row-header';
+                th.innerText = r;
+                tr.appendChild(th);
+
+                // Cells
+                for (let c = 0; c < cols; c++) {
+                    let td = document.createElement('td');
+                    
+                    // The editable div inside the cell
+                    let cellDiv = document.createElement('div');
+                    cellDiv.className = 'cell-content';
+                    cellDiv.contentEditable = true;
+                    
+                    // Store cell coordinates for reference
+                    let colLetter = getColumnLetter(c);
+                    cellDiv.dataset.cellId = `${colLetter}${r}`;
+                    
+                    // Event listeners for Formula Bar sync
+                    cellDiv.addEventListener('focus', function() {
+                        activeCell = this;
+                        formulaInput.value = this.innerText;
+                        formulaInput.placeholder = this.dataset.cellId;
+                    });
+
+                    cellDiv.addEventListener('input', function() {
+                        formulaInput.value = this.innerText;
+                    });
+
+                    td.appendChild(cellDiv);
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+
+            spreadsheetTable.appendChild(thead);
+            spreadsheetTable.appendChild(tbody);
+        }
+
+        // Sync Formula bar edits back to the active cell
+        formulaInput.addEventListener('input', function() {
+            if (activeCell) {
+                activeCell.innerText = this.value;
+            }
+        });
+
+        // Insert some dummy data to make it look realistic
+        function populateDummyData() {
+            const data = {
+                'A1': 'Item Description', 'B1': 'Category', 'C1': 'Qty', 'D1': 'Unit Cost', 'E1': 'Total Cost',
+                'A2': 'Server Hosting (Annual)', 'B2': 'Infrastructure', 'C2': '1', 'D2': '1200.00', 'E2': '=C2*D2',
+                'A3': 'Software Licenses', 'B3': 'SaaS', 'C3': '15', 'D3': '35.00', 'E3': '=C3*D3',
+                'A4': 'Marketing Assets', 'B4': 'Marketing', 'C4': '1', 'D4': '2500.00', 'E4': '=C4*D4',
+                'A5': 'Freelance Development', 'B5': 'Contractors', 'C5': '40', 'D5': '65.00', 'E5': '=C5*D5',
+                'A7': 'Total Estimated Budget', 'E7': '=SUM(E2:E5)'
+            };
+
+            for (const [cellId, value] of Object.entries(data)) {
+                let cell = document.querySelector(`.cell-content[data-cell-id="${cellId}"]`);
+                if (cell) {
+                    cell.innerText = value;
+                    // Bold the headers
+                    if (cellId.includes('1') || cellId === 'A7') {
+                        cell.style.fontWeight = 'bold';
+                        cell.style.color = '#8ab4f8';
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

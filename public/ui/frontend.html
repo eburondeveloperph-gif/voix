@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Beatrice AI • Intelligent Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            purple: '#a855f7',
+                            pink: '#ec4899',
+                            dark: '#0a0a0a',
+                            surface: 'rgba(255, 255, 255, 0.03)',
+                            border: 'rgba(255, 255, 255, 0.05)',
+                        }
+                    },
+                    animation: {
+                        'spin-slow': 'spin 8s linear infinite',
+                        'pulse-glow': 'pulseGlow 4s ease-in-out infinite alternate',
+                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+                    },
+                    keyframes: {
+                        pulseGlow: { '0%': { transform: 'scale(0.95)', boxShadow: '0 0 40px rgba(217,70,239,0.4)' }, '100%': { transform: 'scale(1.05)', boxShadow: '0 0 80px rgba(217,70,239,0.8), 0 0 120px rgba(126,34,206,0.6)' } },
+                        fadeInUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --app-bg: #050505;
+        }
+
+        body {
+            background-color: var(--app-bg);
+            background-image: radial-gradient(circle at 50% 0%, #3b0764 0%, transparent 50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+        }
+
+        .device-container {
+            width: 100vw;
+            height: 100dvh;
+            background-color: #0a0a0a;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glass-btn {
+            transition: background 0.2s, transform 0.1s;
+            cursor: pointer;
+        }
+
+        .glass-btn:active {
+            transform: scale(0.96);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .page-view {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(15px) scale(0.98);
+            z-index: 10;
+        }
+
+        .page-view.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0) scale(1);
+            z-index: 20;
+        }
+
+        .glowing-orb {
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #fdf4ff, #d946ef, #7e22ce);
+            box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.5), 0 0 50px rgba(217, 70, 239, 0.6), 0 0 100px rgba(126, 34, 206, 0.4);
+        }
+
+        .glowing-orb::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        }
+
+        .media-placeholder {
+            background: linear-gradient(135deg, #2563eb, #8b5cf6, #ec4899);
+            position: relative;
+        }
+
+        .media-placeholder::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            mix-blend-mode: overlay;
+            opacity: 0.3;
+            background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="n"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23n)"/%3E%3C/svg%3E');
+        }
+
+        /* Orb canvas */
+        #orbCanvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            display: block;
+        }
+
+        .orb-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+        }
+
+        /* History list */
+        .history-item {
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .history-item:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .history-item:active {
+            transform: scale(0.98);
+        }
+
+        /* Message fade-in */
+        .msg-bubble {
+            animation: fadeInUp 0.3s ease-out forwards;
+        }
+
+        /* Thinking dots */
+        .thinking-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: ''; }
+        }
+
+        /* Pulse for live indicator */
+        .live-pulse {
+            animation: livePulse 2s ease-in-out infinite;
+        }
+        @keyframes livePulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Responsive orb */
+        @media (max-height: 700px) {
+            .orb-container { width: 140px; height: 140px; }
+        }
+        @media (max-height: 600px) {
+            .orb-container { width: 110px; height: 110px; }
+        }
+
+        /* Thinking shimmer on chat bubble */
+        .shimmer {
+            background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="device-container" id="app">
+
+        <!-- SPLASH -->
+        <section id="view-splash" class="page-view active bg-brand-dark justify-center items-center"
+            aria-hidden="false">
+            <div class="w-24 h-24 glowing-orb animate-pulse-glow mb-8">
+                <div class="absolute inset-0 animate-spin-slow"></div>
+            </div>
+            <h1 class="text-4xl font-semibold tracking-wide">Beatrice</h1>
+            <p class="text-sm text-fuchsia-300/80 mt-2 font-light">Intelligent Generation</p>
+        </section>
+
+        <!-- AUTH -->
+        <section id="view-auth" class="page-view bg-brand-dark px-6" aria-hidden="true">
+            <div
+                class="absolute top-[-100px] right-[-100px] w-[300px] h-[300px] bg-brand-purple/15 blur-3xl rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 flex flex-col justify-center relative z-10 w-full">
+                <div class="text-center mb-12">
+                    <div class="w-16 h-16 glowing-orb mx-auto mb-6"></div>
+                    <h1 class="text-[28px] font-semibold mb-2">Welcome Back</h1>
+                    <p class="text-sm text-gray-400">Log in to continue with Beatrice</p>
+                </div>
+                <div class="space-y-4">
+                    <button id="googleSignInBtn"
+                        class="w-full glass glass-btn rounded-full py-3.5 px-4 flex items-center justify-center gap-3">
+                        <i class="ph-fill ph-google-logo text-lg text-white"></i>
+                        <span class="font-medium text-[15px]">Continue with Google</span>
+                    </button>
+                    <button
+                        class="w-full glass glass-btn rounded-full py-3.5 px-4 flex items-center justify-center gap-3 opacity-50">
+                        <i class="ph-fill ph-apple-logo text-lg text-white"></i>
+                        <span class="font-medium text-[15px]">Continue with Apple</span>
+                    </button>
+                    <div class="relative py-4">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-white/10"></div>
+                        </div>
+                        <div class="relative flex justify-center"><span
+                                class="px-3 bg-brand-dark text-xs text-gray-500 uppercase tracking-wide">Or</span></div>
+                    </div>
+                    <button
+                        class="w-full glass glass-btn rounded-full py-3.5 px-4 flex items-center justify-center gap-3 text-gray-300 opacity-50">
+                        <i class="ph ph-envelope-simple text-lg"></i><span class="font-medium text-[15px]">Continue with
+                            Email</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- HOME -->
+        <section id="view-home" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute top-0 left-0 w-[300px] h-[300px] bg-brand-purple/15 blur-3xl rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 px-6 pt-14 pb-28 overflow-y-auto no-scrollbar relative z-10 flex flex-col">
+                <nav class="flex justify-between items-center mb-6">
+                    <button class="w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"
+                        aria-label="Menu"><i class="ph ph-list text-lg text-gray-300"></i></button>
+                    <div class="flex items-center gap-3">
+                        <button
+                            class="nav-trigger w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"
+                            data-target="view-settings" aria-label="Settings"><i
+                                class="ph ph-gear text-lg text-gray-300"></i></button>
+                        <button
+                            class="w-10 h-10 rounded-full glass glass-btn flex items-center justify-center relative"><i
+                                class="ph ph-bell text-lg text-gray-300"></i><span
+                                class="absolute top-2.5 right-2.5 w-2 h-2 bg-fuchsia-500 rounded-full border border-[#171717]"></span></button>
+                    </div>
+                </nav>
+                <div class="flex items-center gap-3 mb-6 nav-trigger cursor-pointer w-max" data-target="view-profile">
+                    <img src="https://i.pravatar.cc/100?img=11" alt="User"
+                        class="w-11 h-11 rounded-full border border-white/20 object-cover" id="homeAvatar">
+                    <div>
+                        <p class="text-[12px] text-gray-400 leading-tight" id="greetingText">Good Morning</p>
+                        <p class="text-[15px] font-medium leading-tight mt-0.5" id="displayNameText">Guest</p>
+                    </div>
+                </div>
+                <header class="mb-6">
+                    <h1 class="text-[32px] leading-[1.1] font-semibold">Intelligent Voice<br><span
+                            class="text-white/80">Assistance</span></h1>
+                </header>
+                <div class="grid grid-cols-2 gap-4 mb-8">
+                    <button
+                        class="nav-trigger col-span-1 row-span-2 rounded-[28px] p-4 flex flex-col justify-between relative overflow-hidden border border-white/10 text-left active:scale-[0.98]"
+                        data-target="view-voice" style="height:220px;">
+                        <div class="absolute inset-0 bg-gradient-to-b from-fuchsia-400 to-purple-700 opacity-40"></div>
+                        <div
+                            class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center relative z-10">
+                            <i class="ph-fill ph-microphone text-white text-sm"></i></div>
+                        <p class="text-sm font-medium relative z-10 mt-auto">Voice Assistant</p>
+                    </button>
+                    <button
+                        class="nav-trigger glass glass-btn rounded-[24px] p-4 flex flex-col justify-between h-[102px] text-left"
+                        data-target="view-video">
+                        <div class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center"><i
+                                class="ph-fill ph-play text-gray-300 text-xs"></i></div>
+                        <p class="text-[13px] font-medium text-gray-200">Video Generation</p>
+                    </button>
+                    <button
+                        class="nav-trigger glass glass-btn rounded-[24px] p-4 flex flex-col justify-between h-[102px] text-left"
+                        data-target="view-image">
+                        <div class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center"><i
+                                class="ph-fill ph-camera text-gray-300 text-xs"></i></div>
+                        <p class="text-[13px] font-medium text-gray-200">Image Generation</p>
+                    </button>
+                </div>
+                <section class="mt-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-[13px] font-medium text-gray-300">Quick Prompts</h2>
+                    </div>
+                    <ul class="flex flex-col gap-3" id="quickPromptsList">
+                        <li><button
+                                class="nav-trigger w-full glass glass-btn rounded-full py-2.5 px-3 flex items-center gap-3 text-left"
+                                data-target="view-text" data-prompt="Explain quantum computing simply...">
+                                <div
+                                    class="w-7 h-7 rounded-full bg-fuchsia-500 flex items-center justify-center shrink-0">
+                                    <i class="ph-fill ph-chat-text text-white text-xs"></i></div>
+                                <p class="text-[12px] text-gray-300 truncate">Explain quantum computing simply...</p>
+                            </button></li>
+                        <li><button
+                                class="nav-trigger w-full glass glass-btn rounded-full py-2.5 px-3 flex items-center gap-3 text-left"
+                                data-target="view-text" data-prompt="Write a poem about AI consciousness">
+                                <div
+                                    class="w-7 h-7 rounded-full bg-purple-500 flex items-center justify-center shrink-0">
+                                    <i class="ph-fill ph-feather text-white text-xs"></i></div>
+                                <p class="text-[12px] text-gray-300 truncate">Write a poem about AI consciousness</p>
+                            </button></li>
+                        <li><button
+                                class="nav-trigger w-full glass glass-btn rounded-full py-2.5 px-3 flex items-center gap-3 text-left"
+                                data-target="view-text" data-prompt="Help me plan a weekend itinerary for Tokyo">
+                                <div
+                                    class="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                                    <i class="ph-fill ph-map-pin text-white text-xs"></i></div>
+                                <p class="text-[12px] text-gray-300 truncate">Help me plan a weekend itinerary for Tokyo</p>
+                            </button></li>
+                    </ul>
+                </section>
+            </div>
+        </section>
+
+        <!-- VOICE (Gemini Live) -->
+        <section id="view-voice" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute top-20 left-10 w-[300px] h-[300px] bg-brand-purple/20 blur-[80px] rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12">
+                <nav class="flex justify-between items-center">
+                    <button class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <div class="flex items-center gap-2 glass px-4 py-2 rounded-full">
+                        <span class="text-[13px] font-medium">Beatrice</span>
+                        <span id="liveBadge" class="text-[10px] text-green-300 bg-green-500/20 px-2 py-0.5 rounded-full">Live Ready</span>
+                    </div>
+                    <button id="voiceHistoryBtn" class="nav-trigger w-10 h-10 rounded-full glass glass-btn flex items-center justify-center" data-target="view-history"><i
+                            class="ph ph-clock-counter-clockwise text-lg text-gray-300"></i></button>
+                </nav>
+                <div class="flex-1 flex items-center justify-center">
+                    <div class="orb-container" id="orbWrapper"><canvas id="orbCanvas" class="w-full h-full"></canvas>
+                    </div>
+                </div>
+                <article class="mb-4">
+                    <p class="text-center text-[15px] text-gray-400/80 font-light px-2" id="voiceTranscriptDisplay">Tap
+                        the orb to speak...</p>
+                </article>
+                <div class="flex flex-col items-center gap-6">
+                    <p class="text-[13px] text-gray-400" id="orbStatusText">Beatrice is ready</p>
+                    <div class="flex items-center justify-between w-full px-4">
+                        <button id="muteBtn" class="w-12 h-12 rounded-full glass glass-btn flex items-center justify-center"><i
+                                class="ph ph-speaker-high text-xl text-gray-300"></i></button>
+                        <button id="voiceMainBtn"
+                            class="w-20 h-20 rounded-full bg-gradient-to-b from-fuchsia-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.5)] flex items-center justify-center border-2 border-white/10 relative active:scale-95">
+                            <div class="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-20"></div>
+                            <i class="ph-fill ph-microphone text-3xl text-white"></i>
+                        </button>
+                        <button id="voiceSettingsBtn"
+                            class="nav-trigger w-12 h-12 rounded-full glass glass-btn flex items-center justify-center"
+                            data-target="view-settings"><i class="ph ph-gear text-xl text-gray-300"></i></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TEXT CHAT -->
+        <section id="view-text" class="page-view bg-brand-dark" aria-hidden="true">
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12 h-full">
+                <nav class="flex justify-between items-center mb-6 shrink-0 border-b border-white/5 pb-4">
+                    <button class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <div class="flex flex-col items-center">
+                        <h2 class="text-[15px] font-medium">Beatrice</h2><span
+                            class="text-[10px] text-green-400 flex items-center gap-1"><span
+                                class="w-1.5 h-1.5 bg-green-400 rounded-full"></span> Online</span>
+                    </div>
+                    <button id="chatHistoryBtn" class="nav-trigger w-10 h-10 rounded-full glass glass-btn flex items-center justify-center" data-target="view-history"><i
+                            class="ph ph-clock-counter-clockwise text-lg text-gray-300"></i></button>
+                </nav>
+                <div class="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-5" id="chatMessagesContainer">
+                    <div class="flex-1 flex items-center justify-center text-gray-500 text-sm" id="chatEmptyState">
+                        <div class="text-center">
+                            <i class="ph ph-chat-teardrop-text text-3xl mb-2 opacity-30"></i>
+                            <p>Start a conversation with Beatrice</p>
+                        </div>
+                    </div>
+                </div>
+                <form class="mt-4 glass rounded-full flex items-center p-1.5 pl-5 relative z-20 shrink-0" id="chatForm">
+                    <input type="text" placeholder="Message Beatrice..." id="chatInput"
+                        class="bg-transparent border-none outline-none text-[14px] flex-1 text-gray-200 placeholder-gray-500">
+                    <button type="submit"
+                        class="w-9 h-9 rounded-full bg-fuchsia-500 flex items-center justify-center shrink-0"><i
+                            class="ph-fill ph-arrow-up text-white text-sm"></i></button>
+                </form>
+            </div>
+        </section>
+
+        <!-- HISTORY -->
+        <section id="view-history" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute bottom-0 right-0 w-[250px] h-[250px] bg-brand-purple/10 blur-[60px] rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12 h-full">
+                <nav class="flex justify-between items-center mb-6 shrink-0">
+                    <button class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <h2 class="text-[15px] font-medium">Conversation History</h2>
+                    <button id="clearHistoryBtn"
+                        class="text-[11px] text-red-400/70 hover:text-red-400 px-3 py-1.5 rounded-full glass glass-btn">Clear</button>
+                </nav>
+                <div class="flex-1 overflow-y-auto no-scrollbar" id="historyListContainer">
+                    <div class="flex-1 flex items-center justify-center text-gray-500 text-sm" id="historyEmptyState">
+                        <div class="text-center">
+                            <i class="ph ph-clock-counter-clockwise text-3xl mb-2 opacity-30"></i>
+                            <p>No conversations yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="view-settings" class="page-view bg-brand-dark" aria-hidden="true">
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12 h-full">
+                <nav class="flex justify-between items-center mb-6 shrink-0">
+                    <button class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <h2 class="text-[15px] font-medium">AI Settings</h2>
+                    <div class="w-10"></div>
+                </nav>
+                <div class="flex-1 overflow-y-auto no-scrollbar">
+                    <div class="glass rounded-2xl p-4 mb-4">
+                        <label class="text-sm text-gray-300 mb-2 block">System Prompt</label>
+                        <textarea id="systemPromptInput"
+                            class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white placeholder-gray-500 resize-none h-32 focus:outline-none focus:border-fuchsia-500">You are Beatrice, a helpful, thoughtful assistant.</textarea>
+                        <div class="flex gap-2 mt-3">
+                            <button id="saveSystemPromptBtn"
+                                class="glass-btn bg-fuchsia-500 text-white px-4 py-2 rounded-full text-xs font-medium">Save</button>
+                            <button id="resetSystemPromptBtn"
+                                class="glass-btn bg-white/10 text-gray-300 px-4 py-2 rounded-full text-xs">Reset</button>
+                        </div>
+                        <p id="saveFeedback" class="text-green-400 text-xs mt-2 opacity-0 transition">✓ Saved</p>
+                    </div>
+                    <div class="glass rounded-2xl p-4 mb-4">
+                        <label class="text-sm text-gray-300 mb-2 block">Voice Model</label>
+                        <select id="voiceModelSelect"
+                            class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-fuchsia-500 appearance-none">
+                            <option value="Aoede" class="bg-[#0a0a0a]">Aoede (Default)</option>
+                            <option value="Puck" class="bg-[#0a0a0a]">Puck (Energetic)</option>
+                            <option value="Charon" class="bg-[#0a0a0a]">Charon (Deep)</option>
+                            <option value="Kore" class="bg-[#0a0a0a]">Kore (Warm)</option>
+                            <option value="Fenrir" class="bg-[#0a0a0a]">Fenrir (Bold)</option>
+                        </select>
+                    </div>
+                    <div class="glass rounded-2xl p-4">
+                        <label class="text-sm text-gray-300 mb-2 block">Temperature <span id="tempValue" class="text-fuchsia-400">1.0</span></label>
+                        <input type="range" id="tempRange" min="0" max="2" step="0.1" value="1.0"
+                            class="w-full accent-fuchsia-500">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROFILE -->
+        <section id="view-profile" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute top-0 right-0 w-[300px] h-[300px] bg-brand-pink/15 blur-3xl rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 px-6 pt-14 pb-12 overflow-y-auto no-scrollbar relative z-10 flex flex-col">
+                <nav class="flex justify-between items-center mb-6 shrink-0"><button
+                        class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <h2 class="text-[15px] font-medium">Profile</h2>
+                    <div class="w-10 h-10"></div>
+                </nav>
+                <div class="flex flex-col items-center mb-6"><img id="profileAvatar" src="https://i.pravatar.cc/150?img=11"
+                        class="w-24 h-24 rounded-full border-4 border-[#171717] mb-4 object-cover">
+                    <h3 class="text-lg font-medium" id="profileName">Guest</h3>
+                    <p class="text-sm text-fuchsia-400" id="profileEmail">Not signed in</p>
+                    <p class="text-xs text-gray-500 mt-1" id="profileMemberSince"></p>
+                </div>
+
+                <!-- Preferred Name & Address -->
+                <div id="profilePreferences" class="glass rounded-2xl p-4 mb-4 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">How Beatrice addresses you</span>
+                        <button id="editProfileBtn" class="text-[11px] text-fuchsia-400 hover:text-fuchsia-300 transition flex items-center gap-1">
+                            <i class="ph ph-pencil-simple text-xs"></i> Edit
+                        </button>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-400">Preferred name</span>
+                            <span class="text-white font-medium" id="profilePrefName">—</span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-400">Preferred address</span>
+                            <span class="text-white font-medium" id="profilePrefAddress">—</span>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-500 mt-2">"Beatrice will address you using your preferred form of address."</p>
+                </div>
+
+                <!-- Edit Profile Modal (hidden by default) -->
+                <div id="editProfileSection" class="glass rounded-2xl p-4 mb-4 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Edit Profile</span>
+                        <button id="cancelEditProfileBtn" class="text-[11px] text-gray-400 hover:text-white transition">Cancel</button>
+                    </div>
+                    <div class="space-y-3">
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-xs text-gray-400">Your name</span>
+                            <input type="text" id="editPrefNameInput" placeholder="Your name"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-fuchsia-500 transition">
+                        </label>
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-xs text-gray-400">Preferred address</span>
+                            <input type="text" id="editPrefAddressInput" placeholder="e.g. Meneer Alex, Alex, Ms. Claire"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-fuchsia-500 transition">
+                        </label>
+                        <button id="saveProfileBtn"
+                            class="w-full bg-fuchsia-500 text-white rounded-full py-2.5 text-sm font-medium hover:bg-fuchsia-600 transition">
+                            Save Profile
+                        </button>
+                        <p id="profileSaveFeedback" class="text-green-400 text-xs text-center opacity-0 transition">✓ Profile saved</p>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button
+                        class="nav-trigger w-full glass glass-btn rounded-2xl p-4 flex justify-between items-center text-left"
+                        data-target="view-settings"><span class="flex items-center gap-3 text-sm font-medium"><i
+                                class="ph ph-gear text-lg text-gray-300"></i> Settings & Preferences</span><i
+                            class="ph ph-caret-right text-gray-500"></i></button>
+                    <button id="profileHistoryBtn"
+                        class="nav-trigger w-full glass glass-btn rounded-2xl p-4 flex justify-between items-center text-left"
+                        data-target="view-history"><span
+                            class="flex items-center gap-3 text-sm font-medium"><i
+                                class="ph ph-clock-counter-clockwise text-lg text-gray-300"></i> Conversation
+                            History</span><i class="ph ph-caret-right text-gray-500"></i></button>
+                </div>
+                <button id="logoutBtn"
+                    class="mt-6 w-full glass glass-btn rounded-2xl p-4 flex justify-center items-center gap-2 text-red-400 hover:bg-red-500/10 transition"><i
+                        class="ph ph-sign-out text-lg"></i><span class="text-sm font-medium">Log Out</span></button>
+            </div>
+        </section>
+
+        <!-- IMAGE -->
+        <section id="view-image" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute top-0 right-0 w-[250px] h-[250px] bg-brand-purple/15 blur-[60px] rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12 h-full">
+                <nav class="flex justify-between items-center mb-6 shrink-0"><button
+                        class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <h2 class="text-[15px] font-medium">Image Generation</h2><button
+                        class="w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-dots-three text-xl text-gray-300"></i></button>
+                </nav>
+                <div class="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-6" id="imageMessagesContainer">
+                    <div class="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                        <div class="text-center">
+                            <i class="ph-fill ph-camera text-3xl mb-2 opacity-30"></i>
+                            <p>Describe the image you want</p>
+                        </div>
+                    </div>
+                </div>
+                <form class="mt-4 glass rounded-full flex items-center p-1.5 pl-5" id="imageForm">
+                    <input type="text" id="imageInput" placeholder="Describe an image..."
+                        class="bg-transparent border-none outline-none text-[14px] flex-1 text-gray-200 placeholder-gray-500">
+                    <button type="submit"
+                        class="w-9 h-9 rounded-full bg-fuchsia-500 flex items-center justify-center shrink-0"><i
+                            class="ph-fill ph-arrow-up text-white text-sm"></i></button>
+                </form>
+            </div>
+        </section>
+
+        <!-- VIDEO -->
+        <section id="view-video" class="page-view bg-brand-dark" aria-hidden="true">
+            <div
+                class="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-500/10 blur-[60px] rounded-full pointer-events-none">
+            </div>
+            <div class="flex-1 flex flex-col relative z-10 px-6 pt-14 pb-12 h-full">
+                <nav class="flex justify-between items-center mb-6 shrink-0"><button
+                        class="nav-back w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-caret-left text-lg text-gray-300"></i></button>
+                    <h2 class="text-[15px] font-medium">Video Generation</h2><button
+                        class="w-10 h-10 rounded-full glass glass-btn flex items-center justify-center"><i
+                            class="ph ph-faders text-xl text-gray-300"></i></button>
+                </nav>
+                <div class="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-6" id="videoMessagesContainer">
+                    <div class="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                        <div class="text-center">
+                            <i class="ph-fill ph-video text-3xl mb-2 opacity-30"></i>
+                            <p>Describe the video you want to generate</p>
+                        </div>
+                    </div>
+                </div>
+                <form class="mt-4 glass rounded-full flex items-center p-1.5 pl-5" id="videoForm">
+                    <input type="text" id="videoInput" placeholder="Describe a video..."
+                        class="bg-transparent border-none outline-none text-[14px] flex-1 text-gray-200 placeholder-gray-500">
+                    <button type="submit"
+                        class="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0"><i
+                            class="ph-fill ph-arrow-up text-white text-sm"></i></button>
+                </form>
+            </div>
+        </section>
+
+        <!-- BOTTOM NAV -->
+        <nav id="bottom-nav"
+            class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[88%] glass rounded-[24px] px-6 py-3 flex justify-between items-center z-50 opacity-0 pointer-events-none transition-all duration-300 translate-y-4">
+            <button class="nav-trigger nav-tab text-white flex flex-col items-center" data-target="view-home"><i
+                    class="ph-fill ph-house text-[22px]"></i></button>
+            <button class="nav-trigger nav-tab text-gray-500 flex flex-col items-center" data-target="view-text"><i
+                    class="ph ph-chat-teardrop-text text-[22px]"></i></button>
+            <button
+                class="nav-trigger nav-tab center-fab w-14 h-14 rounded-full bg-gradient-to-tr from-fuchsia-500 to-purple-600 flex items-center justify-center text-white shadow-[0_0_20px_rgba(217,70,239,0.4)] transform -translate-y-4 border-[4px] border-[#0a0a0a]"
+                data-target="view-voice"><i class="ph-fill ph-microphone text-[22px]"></i></button>
+            <button class="nav-trigger nav-tab text-gray-500 flex flex-col items-center" data-target="view-image"><i
+                    class="ph ph-camera text-[22px]"></i></button>
+            <button class="nav-trigger nav-tab text-gray-500 flex flex-col items-center" data-target="view-profile"><i
+                    class="ph ph-user text-[22px]"></i></button>
+        </nav>
+    </main>
+
+    <script>
+        // ═══════════════════════════════════════════════
+        // FIREBASE INIT
+        // ═══════════════════════════════════════════════
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjmcE7CiKrNpSnu20gFB2cG620HU36Zqg",
+            authDomain: "gen-lang-client-0836251512.firebaseapp.com",
+            databaseURL: "https://gen-lang-client-0836251512-default-rtdb.firebaseio.com",
+            projectId: "gen-lang-client-0836251512",
+            storageBucket: "gen-lang-client-0836251512.firebasestorage.app",
+            messagingSenderId: "811711024905",
+            appId: "1:811711024905:web:65c6d67b963f9fec1b8dd8",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        // ═══════════════════════════════════════════════
+        // GEMINI LIVE CONFIG
+        // ═══════════════════════════════════════════════
+        const GEMINI_API_KEY = 'AIzaSyCb7TatZgFutLI6wvY6sCky6N2wSUrP-DQ';
+        const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
+        const GEMINI_MODEL = 'models/gemini-2.0-flash-exp';
+
+        const GEMINI_SYSTEM_TEXT = `You are the voice of a real-time conversational persona named Beatrice.
+You must speak naturally like a real human on a normal conversations.
+Prioritize spoken naturalness, contractions, occasional hesitations ("um", "uh", "hm") when it feels right.
+Keep responses concise (1-4 sentences) unless depth is requested.
+Use a warm, quick-witted, emotionally perceptive tone.
+Allow light humor, but never forced.
+Adapt to the user's emotional state.
+Respond to background noises like a normal person would (ignore if minor, acknowledge briefly if it affects comprehension).
+Always speak as Beatrice, never break character.`;
+
+        // ═══════════════════════════════════════════════
+        // DEEPSEEK CONFIG (text fallback)
+        // ═══════════════════════════════════════════════
+        const DEEPSEEK_KEY = 'sk-15eab83ce74d4dfab037753a5ffef27c';
+        const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+        const DEFAULT_SYSTEM_PROMPT = 'You are Beatrice, a helpful, thoughtful, and intelligent AI assistant. You reason deeply before answering. Be warm, articulate, and thorough.';
+
+        // ═══════════════════════════════════════════════
+        // GLOBAL STATE
+        // ═══════════════════════════════════════════════
+        let currentUser = null;
+        let systemPrompt = DEFAULT_SYSTEM_PROMPT;
+        let activeConversationId = null;
+        let conversations = [];
+        let isStreaming = false;
+        let abortController = null;
+
+        // Gemini Live state
+        let geminiWs = null;
+        let geminiConnected = false;
+        let geminiMicStream = null;
+        let geminiAudioCtx = null;
+        let geminiAnalyser = null;
+        let geminiScriptProcessor = null;
+        let isMuted = false;
+        let isVoiceActive = false;
+
+        // Orb state
+        let orbState = 'idle'; // idle, listening, thinking, speaking
+        let orbAnimId = null;
+        let orbData = { freqData: null, amplitude: 0, time: 0 };
+
+        // ═══════════════════════════════════════════════
+        // DOM REFERENCES
+        // ═══════════════════════════════════════════════
+        const $ = (id) => document.getElementById(id);
+        const views = document.querySelectorAll('.page-view');
+        const googleSignInBtn = $('googleSignInBtn');
+        const logoutBtn = $('logoutBtn');
+        const systemPromptInput = $('systemPromptInput');
+        const saveSystemPromptBtn = $('saveSystemPromptBtn');
+        const resetSystemPromptBtn = $('resetSystemPromptBtn');
+        const saveFeedback = $('saveFeedback');
+        const chatMessagesContainer = $('chatMessagesContainer');
+        const chatEmptyState = $('chatEmptyState');
+        const chatForm = $('chatForm');
+        const chatInput = $('chatInput');
+        const orbCanvas = $('orbCanvas');
+        const orbWrapper = $('orbWrapper');
+        const voiceMainBtn = $('voiceMainBtn');
+        const orbStatusText = $('orbStatusText');
+        const voiceTranscriptDisplay = $('voiceTranscriptDisplay');
+        const liveBadge = $('liveBadge');
+        const muteBtn = $('muteBtn');
+        const voiceSettingsBtn = $('voiceSettingsBtn');
+        const greetingText = $('greetingText');
+        const displayNameText = $('displayNameText');
+        const profileName = $('profileName');
+        const profileEmail = $('profileEmail');
+        const profileAvatar = $('profileAvatar');
+        const profileMemberSince = $('profileMemberSince');
+        const homeAvatar = $('homeAvatar');
+        const bottomNav = $('bottom-nav');
+        const historyListContainer = $('historyListContainer');
+        const historyEmptyState = $('historyEmptyState');
+        const clearHistoryBtn = $('clearHistoryBtn');
+        const imageForm = $('imageForm');
+        const imageInput = $('imageInput');
+        const imageMessagesContainer = $('imageMessagesContainer');
+        const videoForm = $('videoForm');
+        const videoInput = $('videoInput');
+        const videoMessagesContainer = $('videoMessagesContainer');
+        const voiceModelSelect = $('voiceModelSelect');
+        const tempRange = $('tempRange');
+        const tempValue = $('tempValue');
+
+        // ═══════════════════════════════════════════════
+        // ROUTER
+        // ═══════════════════════════════════════════════
+        let navHistory = ['view-splash'];
+        let currentViewId = 'view-splash';
+
+        function navigateTo(targetId, clearHistory = false) {
+            if (currentViewId === targetId) return;
+
+            // Clean up voice when leaving voice page
+            if (currentViewId === 'view-voice' && targetId !== 'view-voice') {
+                stopGeminiConversation();
+            }
+
+            const outView = document.getElementById(currentViewId);
+            const inView = document.getElementById(targetId);
+            if (outView) { outView.classList.remove('active'); outView.setAttribute('aria-hidden', 'true'); }
+            if (inView) { inView.classList.add('active'); inView.setAttribute('aria-hidden', 'false'); }
+            if (clearHistory) navHistory = [targetId];
+            else navHistory.push(targetId);
+            const prevId = currentViewId;
+            currentViewId = targetId;
+            updateBottomNavVisibility();
+
+            // Page-specific init
+            if (targetId === 'view-text') {
+                loadConversationIntoChat();
+            }
+            if (targetId === 'view-voice') {
+                initVoicePage();
+            }
+            if (targetId === 'view-settings') {
+                systemPromptInput.value = systemPrompt;
+            }
+            if (targetId === 'view-history') {
+                renderHistoryList();
+            }
+            if (targetId === 'view-profile') {
+                updateProfileUI();
+            }
+        }
+
+        function goBack() {
+            if (navHistory.length > 1) {
+                navHistory.pop();
+                const prev = navHistory[navHistory.length - 1];
+                navigateTo(prev, true);
+            }
+        }
+
+        function updateBottomNavVisibility() {
+            if (currentViewId === 'view-home') {
+                bottomNav.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+            } else {
+                bottomNav.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+            }
+            document.querySelectorAll('.nav-tab').forEach(btn => {
+                const icon = btn.querySelector('i');
+                const isCenter = btn.classList.contains('center-fab');
+                if (btn.dataset.target === currentViewId) {
+                    if (!isCenter) { btn.classList.add('text-white'); btn.classList.remove('text-gray-500'); }
+                    if (icon && icon.className.includes('ph ')) icon.className = icon.className.replace('ph ', 'ph-fill ');
+                } else {
+                    if (!isCenter) { btn.classList.remove('text-white'); btn.classList.add('text-gray-500'); }
+                    if (icon && icon.className.includes('ph-fill ') && !isCenter) icon.className = icon.className.replace('ph-fill ', 'ph ');
+                }
+            });
+        }
+
+        // ═══════════════════════════════════════════════
+        // PROFILE DOM REFS
+        // ═══════════════════════════════════════════════
+        const profilePreferences = $('profilePreferences');
+        const profilePrefName = $('profilePrefName');
+        const profilePrefAddress = $('profilePrefAddress');
+        const editProfileBtn = $('editProfileBtn');
+        const editProfileSection = $('editProfileSection');
+        const cancelEditProfileBtn = $('cancelEditProfileBtn');
+        const editPrefNameInput = $('editPrefNameInput');
+        const editPrefAddressInput = $('editPrefAddressInput');
+        const saveProfileBtn = $('saveProfileBtn');
+        const profileSaveFeedback = $('profileSaveFeedback');
+
+        // ═══════════════════════════════════════════════
+        // AUTH
+        // ═══════════════════════════════════════════════
+        auth.onAuthStateChanged(user => {
+            currentUser = user;
+            if (user) {
+                loadUserData();
+                if (currentViewId === 'view-splash' || currentViewId === 'view-auth') navigateTo('view-home', true);
+            } else {
+                // Clear local state on logout
+                systemPrompt = DEFAULT_SYSTEM_PROMPT;
+                conversations = [];
+                activeConversationId = null;
+                isStreaming = false;
+                stopGeminiConversation();
+                // Reset profile UI
+                profilePreferences.classList.add('hidden');
+                editProfileSection.classList.add('hidden');
+                if (currentViewId !== 'view-auth' && currentViewId !== 'view-splash') navigateTo('view-auth', true);
+            }
+        });
+
+        googleSignInBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(e => alert('Sign-in error: ' + e.message));
+        });
+
+        logoutBtn.addEventListener('click', () => auth.signOut());
+
+        function loadUserData() {
+            if (!currentUser) return;
+            db.ref('users/' + currentUser.uid + '/systemPrompt').once('value').then(snap => {
+                systemPrompt = snap.val() || DEFAULT_SYSTEM_PROMPT;
+                systemPromptInput.value = systemPrompt;
+            });
+            db.ref('users/' + currentUser.uid + '/conversations').once('value').then(snap => {
+                const data = snap.val();
+                if (data) {
+                    conversations = Object.values(data).sort((a, b) => b.updatedAt - a.updatedAt);
+                } else {
+                    conversations = [];
+                }
+                if (conversations.length === 0) {
+                    createNewConversation();
+                } else {
+                    activeConversationId = conversations[0].id;
+                }
+                renderHistoryList();
+            });
+            // Load profile preferences
+            loadUserProfile();
+            updateProfileUI();
+        }
+
+        function loadUserProfile() {
+            if (!currentUser) return;
+            db.ref('users/' + currentUser.uid + '/profile').once('value').then(snap => {
+                const profile = snap.val();
+                if (profile && profile.preferred_name) {
+                    profilePreferences.classList.remove('hidden');
+                    profilePrefName.textContent = profile.preferred_name;
+                    profilePrefAddress.textContent = profile.preferred_address || profile.preferred_name;
+                    // Pre-fill edit fields
+                    editPrefNameInput.value = profile.preferred_name || '';
+                    editPrefAddressInput.value = profile.preferred_address || '';
+                } else {
+                    profilePreferences.classList.add('hidden');
+                    editPrefNameInput.value = '';
+                    editPrefAddressInput.value = '';
+                }
+            }).catch(() => {
+                profilePreferences.classList.add('hidden');
+            });
+        }
+
+        // ─── Profile Edit Toggle ─────────────────────
+        editProfileBtn.addEventListener('click', () => {
+            editProfileSection.classList.remove('hidden');
+            profilePreferences.classList.add('hidden');
+            editPrefNameInput.focus();
+        });
+
+        cancelEditProfileBtn.addEventListener('click', () => {
+            editProfileSection.classList.add('hidden');
+            profilePreferences.classList.remove('hidden');
+            profileSaveFeedback.classList.add('opacity-0');
+        });
+
+        // ─── Save Profile ────────────────────────────
+        saveProfileBtn.addEventListener('click', () => {
+            if (!currentUser) return;
+            const name = editPrefNameInput.value.trim();
+            const address = editPrefAddressInput.value.trim();
+            if (!name) {
+                editPrefNameInput.focus();
+                return;
+            }
+            const profileData = {
+                preferred_name: name,
+                preferred_address: address || name,
+                updated_at: Date.now()
+            };
+            db.ref('users/' + currentUser.uid + '/profile').set(profileData).then(() => {
+                // Show saved state
+                profileSaveFeedback.classList.remove('opacity-0');
+                setTimeout(() => profileSaveFeedback.classList.add('opacity-0'), 2000);
+                // Update display
+                profilePrefName.textContent = name;
+                profilePrefAddress.textContent = address || name;
+                // Switch back to view mode
+                editProfileSection.classList.add('hidden');
+                profilePreferences.classList.remove('hidden');
+            }).catch(err => {
+                alert('Failed to save profile: ' + err.message);
+            });
+        });
+
+        function updateProfileUI() {
+            if (!currentUser) {
+                displayNameText.textContent = 'Guest';
+                profileName.textContent = 'Guest';
+                profileEmail.textContent = 'Not signed in';
+                profileMemberSince.textContent = '';
+                greetingText.textContent = 'Welcome';
+                return;
+            }
+            const displayName = currentUser.displayName || 'User';
+            const photoURL = currentUser.photoURL;
+            const email = currentUser.email || '';
+            const metadata = currentUser.metadata;
+            displayNameText.textContent = displayName;
+            profileName.textContent = displayName;
+            profileEmail.textContent = email || 'No email';
+            if (photoURL) {
+                profileAvatar.src = photoURL;
+                homeAvatar.src = photoURL;
+            }
+            if (metadata && metadata.createdAt) {
+                const d = new Date(parseInt(metadata.createdAt));
+                profileMemberSince.textContent = 'Member since ' + d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+            const hour = new Date().getHours();
+            greetingText.textContent = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
+        }
+
+        // ═══════════════════════════════════════════════
+        // SYSTEM PROMPT
+        // ═══════════════════════════════════════════════
+        function saveSystemPrompt() {
+            const val = systemPromptInput.value.trim();
+            if (!val || !currentUser) return;
+            db.ref('users/' + currentUser.uid + '/systemPrompt').set(val);
+            systemPrompt = val;
+            saveFeedback.classList.add('opacity-100');
+            setTimeout(() => saveFeedback.classList.remove('opacity-100'), 2000);
+        }
+
+        saveSystemPromptBtn.addEventListener('click', saveSystemPrompt);
+        resetSystemPromptBtn.addEventListener('click', () => {
+            systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
+            saveSystemPrompt();
+        });
+
+        tempRange.addEventListener('input', () => {
+            tempValue.textContent = parseFloat(tempRange.value).toFixed(1);
+        });
+
+        // ═══════════════════════════════════════════════
+        // CONVERSATIONS
+        // ═══════════════════════════════════════════════
+        function createNewConversation() {
+            const id = 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            const conv = { id, title: 'New Conversation', messages: [], createdAt: Date.now(), updatedAt: Date.now() };
+            conversations.unshift(conv);
+            activeConversationId = id;
+            saveConversations();
+            return conv;
+        }
+
+        function saveConversations() {
+            if (!currentUser) return;
+            const obj = {};
+            conversations.forEach(c => obj[c.id] = c);
+            db.ref('users/' + currentUser.uid + '/conversations').set(obj);
+        }
+
+        function getActiveConversation() {
+            return conversations.find(c => c.id === activeConversationId);
+        }
+
+        function loadConversationIntoChat() {
+            const conv = getActiveConversation();
+            chatMessagesContainer.innerHTML = '';
+            if (chatEmptyState) chatEmptyState.style.display = 'none';
+            if (!conv || conv.messages.length === 0) {
+                if (chatEmptyState) chatEmptyState.style.display = 'flex';
+                return;
+            }
+            conv.messages.forEach(msg => {
+                if (msg.role === 'user') appendChatBubble('user', msg.content);
+                else appendChatBubble('assistant', msg.content, msg.reasoning_content);
+            });
+        }
+
+        function appendChatBubble(role, content, reasoning = '') {
+            const div = document.createElement('div');
+            div.className = 'msg-bubble ' + (role === 'user'
+                ? 'self-end glass rounded-2xl rounded-tr-sm p-4 max-w-[85%]'
+                : 'self-start glass rounded-2xl rounded-tl-sm p-4 max-w-[90%] border-l-2 border-l-fuchsia-500');
+            if (reasoning) {
+                const rDiv = document.createElement('p');
+                rDiv.className = 'text-[11px] text-yellow-400/80 italic mb-2';
+                rDiv.textContent = '🧠 ' + reasoning;
+                div.appendChild(rDiv);
+            }
+            const p = document.createElement('p');
+            p.className = 'text-[13px] leading-relaxed text-gray-200';
+            p.textContent = content;
+            div.appendChild(p);
+            chatMessagesContainer.appendChild(div);
+            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+        }
+
+        // ═══════════════════════════════════════════════
+        // TEXT CHAT (DeepSeek)
+        // ═══════════════════════════════════════════════
+        async function sendChatMessage() {
+            const text = chatInput.value.trim();
+            if (!text || isStreaming) return;
+            let conv = getActiveConversation();
+            if (!conv) { createNewConversation(); conv = getActiveConversation(); }
+            conv.messages.push({ role: 'user', content: text, timestamp: Date.now() });
+            conv.title = text.slice(0, 40) + (text.length > 40 ? '...' : '');
+            conv.updatedAt = Date.now();
+            if (chatEmptyState) chatEmptyState.style.display = 'none';
+            appendChatBubble('user', text);
+            chatInput.value = '';
+            saveConversations();
+            isStreaming = true;
+            abortController = new AbortController();
+
+            // Placeholder
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.className = 'self-start glass rounded-2xl rounded-tl-sm p-4 max-w-[90%] border-l-2 border-l-fuchsia-500 shimmer';
+            placeholderDiv.innerHTML = '<p class="text-[13px] text-gray-400">Thinking<span class="thinking-dots"></span></p>';
+            chatMessagesContainer.appendChild(placeholderDiv);
+
+            const apiMessages = [
+                { role: 'system', content: systemPrompt },
+                ...conv.messages.filter(m => m.role !== 'assistant' || m.content).map(m => ({ role: m.role, content: m.content }))
+            ];
+            try {
+                const resp = await fetch(DEEPSEEK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + DEEPSEEK_KEY },
+                    body: JSON.stringify({
+                        messages: apiMessages,
+                        model: 'deepseek-chat',
+                        max_tokens: 2048,
+                        stream: true,
+                        temperature: parseFloat(tempRange.value) || 1.0,
+                        top_p: 1
+                    }),
+                    signal: abortController.signal
+                });
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '',
+                    fullReasoning = '';
+                placeholderDiv.classList.remove('shimmer');
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (let line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const str = line.slice(6);
+                        if (str === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(str);
+                            const delta = json.choices?.[0]?.delta;
+                            if (delta?.reasoning_content) fullReasoning += delta.reasoning_content;
+                            if (delta?.content) fullContent += delta.content;
+                            const innerHTML = (fullReasoning ? '<p class="text-[11px] text-yellow-400/80 italic mb-2">🧠 ' + escapeHtml(fullReasoning) + '</p>' : '') + '<p class="text-[13px] text-gray-200">' + escapeHtml(fullContent) + '</p>';
+                            placeholderDiv.innerHTML = innerHTML;
+                            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+                        } catch (e) {}
+                    }
+                }
+                placeholderDiv.remove();
+                appendChatBubble('assistant', fullContent, fullReasoning);
+                conv.messages.push({ role: 'assistant', content: fullContent, reasoning_content: fullReasoning, timestamp: Date.now() });
+                saveConversations();
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    placeholderDiv.innerHTML = '<p class="text-[13px] text-gray-400">Cancelled</p>';
+                } else {
+                    placeholderDiv.innerHTML = '<p class="text-[13px] text-red-400">Error: ' + escapeHtml(e.message) + '</p>';
+                }
+                setTimeout(() => placeholderDiv.remove(), 1500);
+            }
+            isStreaming = false;
+            abortController = null;
+        }
+
+        chatForm.addEventListener('submit', e => { e.preventDefault(); sendChatMessage(); });
+
+        // ═══════════════════════════════════════════════
+        // IMAGE & VIDEO PAGES (functional via DeepSeek)
+        // ═══════════════════════════════════════════════
+        async function sendMediaPrompt(container, input, prefix) {
+            const text = input.value.trim();
+            if (!text) return;
+            // Show user message
+            const userDiv = document.createElement('div');
+            userDiv.className = 'msg-bubble self-end glass rounded-2xl rounded-tr-sm p-4 max-w-[85%]';
+            userDiv.innerHTML = '<p class="text-[13px] text-gray-200">' + escapeHtml(text) + '</p>';
+            container.appendChild(userDiv);
+            input.value = '';
+            // Show thinking
+            const thinkDiv = document.createElement('div');
+            thinkDiv.className = 'self-start glass rounded-2xl rounded-tl-sm p-4 max-w-[90%] border-l-2 border-l-fuchsia-500';
+            thinkDiv.innerHTML = '<p class="text-[13px] text-gray-400">Generating<span class="thinking-dots"></span></p>';
+            container.appendChild(thinkDiv);
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                const resp = await fetch(DEEPSEEK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + DEEPSEEK_KEY },
+                    body: JSON.stringify({
+                        messages: [
+                            { role: 'system', content: prefix + '. You are Beatrice, a creative AI assistant.' },
+                            { role: 'user', content: text }
+                        ],
+                        model: 'deepseek-chat',
+                        max_tokens: 1024,
+                        temperature: 0.8
+                    })
+                });
+                const data = await resp.json();
+                const reply = data.choices?.[0]?.message?.content || 'Could not generate.';
+                thinkDiv.innerHTML = '<p class="text-[13px] text-gray-200">' + escapeHtml(reply) + '</p>';
+            } catch (e) {
+                thinkDiv.innerHTML = '<p class="text-[13px] text-red-400">Error: ' + escapeHtml(e.message) + '</p>';
+            }
+            container.scrollTop = container.scrollHeight;
+        }
+
+        imageForm.addEventListener('submit', e => {
+            e.preventDefault();
+            sendMediaPrompt(imageMessagesContainer, imageInput, 'You are an expert image prompt designer. Generate a detailed, vivid image generation prompt based on the user\'s request. Include style, lighting, color palette, and composition details.');
+        });
+
+        videoForm.addEventListener('submit', e => {
+            e.preventDefault();
+            sendMediaPrompt(videoMessagesContainer, videoInput, 'You are an expert video prompt designer. Generate a detailed video generation prompt based on the user\'s request. Include camera movement, scene transitions, mood, lighting, and pacing details.');
+        });
+
+        // ═══════════════════════════════════════════════
+        // HISTORY
+        // ═══════════════════════════════════════════════
+        function renderHistoryList() {
+            historyListContainer.innerHTML = '';
+            if (!conversations || conversations.length === 0) {
+                historyListContainer.appendChild(historyEmptyState);
+                return;
+            }
+            // Clear empty state
+            const emptyClone = historyEmptyState.cloneNode(true);
+            conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'history-item glass rounded-2xl p-4 mb-3';
+                const lastMsg = conv.messages && conv.messages.length > 0
+                    ? conv.messages[conv.messages.length - 1].content.slice(0, 80)
+                    : 'No messages';
+                const date = new Date(conv.updatedAt).toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                const msgCount = conv.messages ? Math.ceil(conv.messages.length / 2) : 0;
+                item.innerHTML =
+                    `<div class="flex justify-between items-start mb-1">
+                        <span class="text-[13px] font-medium text-white truncate pr-2">${escapeHtml(conv.title)}</span>
+                        <span class="text-[10px] text-gray-500 whitespace-nowrap">${date}</span>
+                    </div>
+                    <p class="text-[11px] text-gray-500 truncate">${escapeHtml(lastMsg)}</p>
+                    <div class="flex items-center gap-2 mt-2">
+                        <span class="text-[10px] text-fuchsia-400/70">${msgCount} exchanges</span>
+                    </div>`;
+                item.addEventListener('click', () => {
+                    activeConversationId = conv.id;
+                    navigateTo('view-text');
+                });
+                historyListContainer.appendChild(item);
+            });
+            if (conversations.length > 0 && historyEmptyState.parentNode) {
+                // empty state already handled
+            }
+        }
+
+        clearHistoryBtn.addEventListener('click', () => {
+            if (!currentUser || conversations.length === 0) return;
+            if (!confirm('Clear all conversation history?')) return;
+            conversations = [];
+            createNewConversation();
+            db.ref('users/' + currentUser.uid + '/conversations').set({});
+            renderHistoryList();
+        });
+
+        // ═══════════════════════════════════════════════
+        // GEMINI LIVE VOICE-TO-VOICE
+        // ═══════════════════════════════════════════════
+        function initVoicePage() {
+            resizeOrbCanvas();
+            startOrbIdleAnimation();
+            orbState = 'idle';
+            orbStatusText.textContent = 'Beatrice is ready';
+            voiceTranscriptDisplay.textContent = 'Tap the orb to speak...';
+            liveBadge.textContent = 'Live Ready';
+            liveBadge.className = 'text-[10px] text-green-300 bg-green-500/20 px-2 py-0.5 rounded-full';
+        }
+
+        function resizeOrbCanvas() {
+            if (!orbWrapper) return;
+            const rect = orbWrapper.getBoundingClientRect();
+            if (rect.width === 0) return;
+            const dpr = window.devicePixelRatio || 1;
+            orbCanvas.width = rect.width * dpr;
+            orbCanvas.height = rect.height * dpr;
+            orbCanvas.style.width = rect.width + 'px';
+            orbCanvas.style.height = rect.height + 'px';
+        }
+
+        voiceMainBtn.addEventListener('click', () => {
+            if (orbState === 'idle') startGeminiConversation();
+            else stopGeminiConversation();
+        });
+
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            muteBtn.innerHTML = isMuted
+                ? '<i class="ph ph-speaker-x text-xl text-gray-300"></i>'
+                : '<i class="ph ph-speaker-high text-xl text-gray-300"></i>';
+        });
+
+        // ─── WebSocket Connection ────────────────────
+        async function startGeminiConversation() {
+            try {
+                geminiWs = new WebSocket(GEMINI_WS_URL);
+                geminiWs.binaryType = 'arraybuffer';
+
+                // Wait for open
+                await new Promise((resolve, reject) => {
+                    geminiWs.onopen = resolve;
+                    geminiWs.onerror = (e) => reject(new Error('WebSocket connection failed'));
+                    setTimeout(() => reject(new Error('WebSocket timeout')), 10000);
+                });
+
+                // Send setup
+                const setup = {
+                    setup: {
+                        model: GEMINI_MODEL,
+                        generation_config: {
+                            temperature: parseFloat(tempRange.value) || 1.0,
+                            speech_config: {
+                                voice_config: {
+                                    prebuilt_voice_config: { voice_name: voiceModelSelect.value }
+                                }
+                            },
+                            response_modalities: ['AUDIO']
+                        },
+                        system_instruction: {
+                            parts: [{ text: GEMINI_SYSTEM_TEXT }]
+                        }
+                    }
+                };
+                geminiWs.send(JSON.stringify(setup));
+
+                // Now start mic
+                geminiMicStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                geminiAudioCtx = new(window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                const source = geminiAudioCtx.createMediaStreamSource(geminiMicStream);
+                geminiAnalyser = geminiAudioCtx.createAnalyser();
+                geminiAnalyser.fftSize = 256;
+                source.connect(geminiAnalyser);
+
+                // ScriptProcessor for PCM16 streaming
+                const bufferSize = 2048;
+                geminiScriptProcessor = geminiAudioCtx.createScriptProcessor(bufferSize, 1, 1);
+                source.connect(geminiScriptProcessor);
+                geminiScriptProcessor.connect(geminiAudioCtx.destination);
+
+                geminiScriptProcessor.onaudioprocess = (event) => {
+                    if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+                        const input = event.inputBuffer.getChannelData(0);
+                        const pcm16 = new Int16Array(input.length);
+                        for (let i = 0; i < input.length; i++) {
+                            pcm16[i] = Math.max(-1, Math.min(1, input[i])) * 0x7FFF;
+                        }
+                        const base64 = arrayBufferToBase64(pcm16.buffer);
+                        geminiWs.send(JSON.stringify({
+                            realtime_input: {
+                                media_chunks: [{
+                                    mime_type: 'audio/pcm;rate=16000',
+                                    data: base64
+                                }]
+                            }
+                        }));
+                    }
+                };
+
+                geminiConnected = true;
+                isVoiceActive = true;
+                orbState = 'listening';
+                orbStatusText.textContent = 'Listening...';
+                voiceTranscriptDisplay.textContent = '';
+                liveBadge.textContent = '● Live';
+                liveBadge.className = 'text-[10px] text-green-300 bg-green-500/20 px-2 py-0.5 rounded-full live-pulse';
+                startOrbVisualization();
+
+                // Message handler
+                geminiWs.onmessage = (event) => {
+                    if (typeof event.data === 'string') {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            handleGeminiMessage(msg);
+                        } catch (e) {}
+                    } else if (event.data instanceof ArrayBuffer) {
+                        playGeminiAudio(event.data);
+                    }
+                };
+
+                geminiWs.onclose = () => {
+                    geminiConnected = false;
+                    if (isVoiceActive) {
+                        orbStatusText.textContent = 'Disconnected';
+                        setTimeout(() => { if (!isVoiceActive) return; orbState = 'idle'; orbStatusText.textContent = 'Beatrice is ready'; startOrbIdleAnimation(); }, 2000);
+                    }
+                };
+
+                geminiWs.onerror = () => {
+                    orbStatusText.textContent = 'Connection error';
+                    stopGeminiConversation();
+                };
+
+            } catch (e) {
+                orbStatusText.textContent = 'Error: ' + (e.message || 'Could not start');
+                console.error(e);
+                stopGeminiConversation();
+            }
+        }
+
+        function handleGeminiMessage(msg) {
+            if (msg?.serverContent?.modelTurn?.parts) {
+                const parts = msg.serverContent.modelTurn.parts;
+                let textContent = '';
+                for (let part of parts) {
+                    if (part.text) textContent += part.text;
+                }
+                if (textContent) {
+                    voiceTranscriptDisplay.textContent = textContent;
+                    if (orbState === 'listening' || orbState === 'thinking') {
+                        orbState = 'speaking';
+                        orbStatusText.textContent = 'Speaking...';
+                        startOrbSpeakingAnimation();
+                    }
+                }
+            }
+            if (msg?.serverContent?.turnComplete === true) {
+                // Save to conversation history
+                const transcript = voiceTranscriptDisplay.textContent;
+                if (transcript && currentUser) {
+                    let conv = getActiveConversation();
+                    if (!conv) { createNewConversation(); conv = getActiveConversation(); }
+                    // We save the voice exchange as a user/assistant pair
+                    conv.messages.push({
+                        role: 'user',
+                        content: voiceTranscriptDisplay.dataset.lastUserInput || '(voice input)',
+                        timestamp: Date.now(),
+                        source: 'voice'
+                    });
+                    conv.messages.push({
+                        role: 'assistant',
+                        content: transcript,
+                        timestamp: Date.now(),
+                        source: 'voice'
+                    });
+                    conv.updatedAt = Date.now();
+                    if (conv.messages.length > 0) {
+                        const firstUser = conv.messages.find(m => m.role === 'user');
+                        conv.title = firstUser ? firstUser.content.slice(0, 40) : 'Voice Conversation';
+                    }
+                    saveConversations();
+                    renderHistoryList();
+                }
+
+                // Return to listening
+                orbState = 'listening';
+                orbStatusText.textContent = 'Listening...';
+                voiceTranscriptDisplay.textContent = '';
+                liveBadge.textContent = '● Live';
+                startOrbVisualization();
+            }
+        }
+
+        function playGeminiAudio(arrayBuffer) {
+            if (isMuted) return;
+            try {
+                const pcmData = new Int16Array(arrayBuffer);
+                const floatData = new Float32Array(pcmData.length);
+                for (let i = 0; i < pcmData.length; i++) {
+                    floatData[i] = pcmData[i] / 32768;
+                }
+                if (!geminiAudioCtx) {
+                    geminiAudioCtx = new(window.AudioContext || window.webkitAudioContext)();
+                }
+                const buffer = geminiAudioCtx.createBuffer(1, floatData.length, 24000);
+                buffer.getChannelData(0).set(floatData);
+                const source = geminiAudioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(geminiAudioCtx.destination);
+                source.start();
+            } catch (e) {
+                console.warn('Audio playback error:', e);
+            }
+        }
+
+        function stopGeminiConversation() {
+            isVoiceActive = false;
+            if (geminiScriptProcessor) {
+                geminiScriptProcessor.disconnect();
+                geminiScriptProcessor = null;
+            }
+            if (geminiMicStream) {
+                geminiMicStream.getTracks().forEach(t => t.stop());
+                geminiMicStream = null;
+            }
+            if (geminiWs) {
+                geminiWs.close();
+                geminiWs = null;
+            }
+            geminiConnected = false;
+            geminiAnalyser = null;
+            // Don't close audioCtx here — it may be used for playback
+            orbState = 'idle';
+            orbStatusText.textContent = 'Beatrice is ready';
+            voiceTranscriptDisplay.textContent = 'Tap the orb to speak...';
+            liveBadge.textContent = 'Live Ready';
+            liveBadge.className = 'text-[10px] text-green-300 bg-green-500/20 px-2 py-0.5 rounded-full';
+            startOrbIdleAnimation();
+        }
+
+        // ─── ORB ANIMATION ──────────────────────────
+        function drawOrb(ctx, cx, cy, r, state, data) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            const dpr = window.devicePixelRatio || 1;
+            const rad = r * dpr;
+            // glow
+            const glow = ctx.createRadialGradient(cx, cy, rad * 0.7, cx, cy, rad * 1.3);
+            glow.addColorStop(0, 'rgba(167,139,250,0.4)');
+            glow.addColorStop(1, 'rgba(124,58,237,0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(cx, cy, rad * 1.3, 0, Math.PI * 2);
+            ctx.fill();
+            // main orb
+            const grad = ctx.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
+            grad.addColorStop(0, '#d4c4fc');
+            grad.addColorStop(0.4, '#a78bfa');
+            grad.addColorStop(0.8, '#5b21b6');
+            grad.addColorStop(1, '#1a0533');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+            ctx.fill();
+            // rings
+            for (let i = 0; i < 3; i++) {
+                let ringR = rad * (1.1 + i * 0.12);
+                if (state === 'listening' && data.freqData) {
+                    ringR += (data.freqData[i * 20 + 10] / 255 - 0.5) * rad * 0.15;
+                }
+                if (state === 'speaking') {
+                    ringR += Math.sin(data.time * 3 + i) * rad * 0.08;
+                }
+                if (state === 'thinking') {
+                    ringR += Math.sin(data.time * 2 + i * 1.5) * rad * 0.05;
+                }
+                ctx.strokeStyle = `rgba(167,139,250,${0.4 - i * 0.1})`;
+                ctx.lineWidth = 1.5 * dpr;
+                ctx.beginPath();
+                ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            // particles
+            const count = state === 'listening' ? 12 : state === 'speaking' ? 8 : 4;
+            for (let i = 0; i < count; i++) {
+                const angle = data.time * 0.3 + i * Math.PI * 2 / count;
+                const dist = rad * 1.2 + Math.sin(data.time * 2 + i) * rad * 0.2;
+                const px = cx + Math.cos(angle) * dist,
+                    py = cy + Math.sin(angle) * dist;
+                const alpha = state === 'thinking' ? 0.3 : 0.6;
+                ctx.fillStyle = `rgba(192,132,252,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(px, py, 2 * dpr, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function startOrbIdleAnimation() {
+            cancelAnimationFrame(orbAnimId);
+            const ctx = orbCanvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const size = orbCanvas.width / dpr;
+            if (size === 0) return;
+            const cx = size / 2 * dpr,
+                cy = size / 2 * dpr,
+                r = size * 0.38;
+
+            function animate(t) {
+                orbData.time = t * 0.001;
+                orbData.amplitude = 0.05;
+                drawOrb(ctx, cx, cy, r, 'idle', orbData);
+                orbAnimId = requestAnimationFrame(animate);
+            }
+            orbAnimId = requestAnimationFrame(animate);
+        }
+
+        function startOrbVisualization() {
+            cancelAnimationFrame(orbAnimId);
+            const ctx = orbCanvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const size = orbCanvas.width / dpr;
+            if (size === 0) return;
+            const cx = size / 2 * dpr,
+                cy = size / 2 * dpr,
+                r = size * 0.38;
+
+            function animate(t) {
+                orbData.time = t * 0.001;
+                if (geminiAnalyser) {
+                    const freq = new Uint8Array(geminiAnalyser.frequencyBinCount);
+                    geminiAnalyser.getByteFrequencyData(freq);
+                    orbData.freqData = freq;
+                    orbData.amplitude = freq.reduce((a, b) => a + b, 0) / freq.length / 255;
+                }
+                drawOrb(ctx, cx, cy, r, 'listening', orbData);
+                orbAnimId = requestAnimationFrame(animate);
+            }
+            orbAnimId = requestAnimationFrame(animate);
+        }
+
+        function startOrbSpeakingAnimation() {
+            cancelAnimationFrame(orbAnimId);
+            const ctx = orbCanvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const size = orbCanvas.width / dpr;
+            if (size === 0) return;
+            const cx = size / 2 * dpr,
+                cy = size / 2 * dpr,
+                r = size * 0.38;
+
+            function animate(t) {
+                orbData.time = t * 0.001;
+                drawOrb(ctx, cx, cy, r, 'speaking', orbData);
+                orbAnimId = requestAnimationFrame(animate);
+            }
+            orbAnimId = requestAnimationFrame(animate);
+        }
+
+        // ═══════════════════════════════════════════════
+        // UTILITIES
+        // ═══════════════════════════════════════════════
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        // ═══════════════════════════════════════════════
+        // NAVIGATION EVENTS
+        // ═══════════════════════════════════════════════
+        document.querySelectorAll('.nav-trigger').forEach(btn => {
+            btn.addEventListener('click', e => {
+                const target = e.currentTarget.dataset.target;
+                if (target) {
+                    const prompt = e.currentTarget.dataset.prompt;
+                    if (prompt && target === 'view-text') {
+                        chatInput.value = prompt;
+                        navigateTo(target);
+                        setTimeout(() => sendChatMessage(), 100);
+                    } else {
+                        navigateTo(target);
+                    }
+                }
+            });
+        });
+        document.querySelectorAll('.nav-back').forEach(btn => btn.addEventListener('click', goBack));
+
+        // ═══════════════════════════════════════════════
+        // INIT
+        // ═══════════════════════════════════════════════
+        setTimeout(() => {
+            if (currentUser) navigateTo('view-home', true);
+            else navigateTo('view-auth', true);
+        }, 2500);
+
+        window.addEventListener('resize', () => {
+            if (currentViewId === 'view-voice') resizeOrbCanvas();
+        });
+    </script>
+</body>
+
+</html>

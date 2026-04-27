@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - Presentation Panel with Left-Side Loading</title>
+    <style>
+        /* Base Reset & Typography */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #171719; 
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        /* Layout Structure */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* =========================================
+           LEFT PANEL STRUCTURE
+           ========================================= */
+        .left-panel {
+            flex: 1;
+            position: relative;
+            background-color: #121214;
+            overflow: hidden; /* Prevents slide overflow */
+        }
+
+        /* --- SKELETON LOADING UI (Only on Left) --- */
+        #left-skeleton {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            background-color: #121214;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Shimmer Animation */
+        .shimmer {
+            background: linear-gradient(90deg, #202124 25%, #3c4043 50%, #202124 75%);
+            background-size: 200% 100%;
+            animation: loadingShimmer 1.5s infinite linear;
+            border-radius: 6px;
+        }
+
+        @keyframes loadingShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Skeleton Left Elements */
+        .skel-title { width: 450px; height: 60px; margin-bottom: 25px; }
+        .skel-subtitle { width: 300px; height: 30px; margin-bottom: 40px; }
+        .skel-box { width: 100%; max-width: 700px; height: 250px; border-radius: 12px; }
+        .skel-nav-dots { display: flex; gap: 12px; margin-top: 60px;}
+        .skel-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+
+        /* --- ACTUAL SLIDE CONTENT (Hidden initially) --- */
+        #left-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            opacity: 0; /* Starts hidden, fades in */
+            transition: opacity 0.5s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slides-track {
+            display: flex;
+            width: 400%; /* 100% per slide * 4 slides */
+            height: 100%;
+            transition: transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .slide {
+            width: 25%;
+            height: 100%;
+            padding: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .slide h1 { font-size: 3.5rem; margin-bottom: 20px; color: #8ab4f8; font-weight: 600; }
+        .slide h2 { font-size: 2.5rem; margin-bottom: 30px; color: #8ab4f8; }
+        .slide p { font-size: 1.2rem; color: #e8eaed; line-height: 1.6; max-width: 600px; }
+        
+        .slide-content-box {
+            text-align: left;
+            background: #202124;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid #3c4043;
+            width: 100%;
+            max-width: 700px;
+        }
+        
+        .slide-content-box ul { list-style-position: inside; font-size: 1.2rem; color: #e8eaed; line-height: 2; }
+        
+        .chart-placeholder {
+            height: 250px;
+            border: 2px dashed #5f6368;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9aa0a6;
+            margin-top: 20px;
+        }
+
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .nav-btn:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-50%) scale(1.1); }
+        .prev-btn { left: 30px; }
+        .next-btn { right: 30px; }
+
+        .slide-indicators {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+        .dot {
+            width: 10px;
+            height: 10px;
+            background: #5f6368;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.3s;
+        }
+        .dot:hover { background: #9aa0a6; }
+        .dot.active { background: #8ab4f8; transform: scale(1.3); }
+
+        /* =========================================
+           RIGHT PANEL (Static, Always Visible)
+           ========================================= */
+        .right-panel {
+            width: 380px;
+            background-color: #202124;
+            border-left: 1px solid #3c4043;
+            display: flex;
+            flex-direction: column;
+            z-index: 30;
+        }
+        .rp-header {
+            padding: 24px;
+            font-size: 1.3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3c4043;
+        }
+        .close-icon { color: #9aa0a6; cursor: pointer; font-size: 1.2rem; }
+        .rp-content { padding: 24px; flex: 1; overflow-y: auto; }
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            color: #9aa0a6;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            background-color: #8ab4f8;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .checkbox::after {
+            content: '✓'; color: #202124; font-size: 12px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- LEFT PANEL (Contains Loading & Slides) -->
+        <div class="left-panel">
+            
+            <!-- 1. SKELETON LOADING (Only inside left panel) -->
+            <div id="left-skeleton">
+                <div class="shimmer skel-title"></div>
+                <div class="shimmer skel-subtitle"></div>
+                <div class="shimmer skel-box"></div>
+                <div class="skel-nav-dots">
+                    <div class="shimmer skel-dot"></div>
+                    <div class="shimmer skel-dot"></div>
+                    <div class="shimmer skel-dot"></div>
+                    <div class="shimmer skel-dot"></div>
+                </div>
+            </div>
+
+            <!-- 2. ACTUAL SLIDES (Hidden initially) -->
+            <div id="left-content">
+                <div class="slides-track" id="slidesTrack">
+                    
+                    <!-- Slide 1 -->
+                    <div class="slide">
+                        <h1>Project Presentation</h1>
+                        <p>An overview of the new integrated toolset and recent progress.</p>
+                    </div>
+
+                    <!-- Slide 2 -->
+                    <div class="slide">
+                        <h2>Core Capabilities</h2>
+                        <div class="slide-content-box">
+                            <ul>
+                                <li>Automated email sorting and response generation.</li>
+                                <li>Real-time spreadsheet cell updates.</li>
+                                <li>Dynamic generation of PowerPoint-like presentations.</li>
+                                <li>Secure file manipulation within Google Drive.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Slide 3 -->
+                    <div class="slide">
+                        <h2>Q3 Performance Metrics</h2>
+                        <div class="slide-content-box">
+                            <p>Automation task efficiency has increased significantly over the last sprint.</p>
+                            <div class="chart-placeholder">[ Chart Graphic / Data Visualization Placeholder ]</div>
+                        </div>
+                    </div>
+
+                    <!-- Slide 4 -->
+                    <div class="slide">
+                        <h1>Next Steps</h1>
+                        <p>Please refer to the settings panel on the right to configure your active functions. Once configured, you can start speaking to proceed.</p>
+                    </div>
+
+                </div>
+
+                <button class="nav-btn prev-btn" onclick="moveSlide(-1)">&#10094;</button>
+                <button class="nav-btn next-btn" onclick="moveSlide(1)">&#10095;</button>
+
+                <div class="slide-indicators">
+                    <div class="dot active" onclick="goToSlide(0)"></div>
+                    <div class="dot" onclick="goToSlide(1)"></div>
+                    <div class="dot" onclick="goToSlide(2)"></div>
+                    <div class="dot" onclick="goToSlide(3)"></div>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- RIGHT PANEL (Static & always visible) -->
+        <div class="right-panel">
+            <div class="rp-header">
+                <span>Settings</span>
+                <span class="close-icon">&#10005;</span>
+            </div>
+            <div class="rp-content">
+                <div class="setting-item"><div class="checkbox"></div> gmail_list_messages</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_get_message</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_send_email</div>
+                <div class="setting-item"><div class="checkbox"></div> gmail_delete_message</div>
+                <div class="setting-item"><div class="checkbox"></div> drive_list_files</div>
+                <div class="setting-item"><div class="checkbox"></div> drive_create_file</div>
+                <div class="setting-item"><div class="checkbox"></div> sheets_create</div>
+                <div class="setting-item"><div class="checkbox"></div> slides_create</div>
+                <div class="setting-item"><div class="checkbox"></div> slides_add_slide</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // --- 1. Loading Simulation Logic ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const leftSkeleton = document.getElementById('left-skeleton');
+            const leftContent = document.getElementById('left-content');
+
+            // Simulate a 3-second data fetch / load time ONLY for the left side
+            setTimeout(() => {
+                // Fade out skeleton
+                leftSkeleton.style.opacity = '0';
+                
+                setTimeout(() => {
+                    // Hide skeleton completely, fade in actual slides
+                    leftSkeleton.style.display = 'none';
+                    leftContent.style.opacity = '1';
+                }, 500); // Matches the 0.5s CSS transition
+            }, 3000); 
+        });
+
+        // --- 2. Presentation Slides Logic ---
+        const track = document.getElementById('slidesTrack');
+        const dots = document.querySelectorAll('.dot');
+        let currentSlide = 0;
+        const totalSlides = 4;
+
+        function updateSlidePosition() {
+            track.style.transform = `translateX(-${currentSlide * 25}%)`;
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+        }
+
+        function moveSlide(direction) {
+            currentSlide += direction;
+            if (currentSlide < 0) currentSlide = totalSlides - 1;
+            if (currentSlide >= totalSlides) currentSlide = 0;
+            updateSlidePosition();
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            updateSlidePosition();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') moveSlide(1);
+            if (e.key === 'ArrowLeft') moveSlide(-1);
+        });
+    </script>
+</body>
+</html>
