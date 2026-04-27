@@ -10,7 +10,7 @@ import ControlTray from '../../console/control-tray/ControlTray';
 import TestLogViewer from '../../TestLogViewer';
 // FIX: Import LiveServerContent to correctly type the content handler.
 import { LiveServerContent, Modality } from '@google/genai';
-import { buildBeatriceLiveSystemPrompt } from '@/lib/prompts/beatrice';
+import { buildBeatriceLiveSystemPrompt, BEATRICE_ON_TOP_PERSONA } from '@/lib/prompts/beatrice';
 import { VoiceCommandRouter } from '@/lib/document/voice-command-router';
 import { MemoryService } from '@/lib/document/memory-service';
 import { OCRService } from '@/lib/document/ocr-service';
@@ -216,7 +216,7 @@ export default function StreamingConsole() {
       }));
 
     const finalSystemPrompt = template === 'beatrice'
-      ? buildBeatriceLiveSystemPrompt(UserProfileService.buildProfilePrompt(profile))
+      ? buildBeatriceLiveSystemPrompt(UserProfileService.buildProfilePrompt(profile), undefined, BEATRICE_ON_TOP_PERSONA)
       : systemPrompt;
 
     const config = {

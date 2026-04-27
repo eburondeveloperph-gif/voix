@@ -97,7 +97,7 @@ export default function Sidebar() {
           <div className="flex flex-col gap-2">
             <label className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Voice System Persona</label>
             <div className="w-full bg-[#181A24] border border-white/10 rounded-lg px-4 py-4 text-sm text-gray-300 leading-relaxed">
-              <div className="text-white font-medium mb-1">Beatrice is locked for Gemini Live audio</div>
+              <div className="text-white font-medium mb-1">Beatrice is locked for Eburon Live</div>
               <div className="text-gray-400">
                 The live voice prompt is now system-managed with the default Beatrice persona for Jo Lernout and is hidden from the frontend editor.
               </div>

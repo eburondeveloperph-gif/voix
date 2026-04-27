@@ -46,7 +46,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { LiveAPIProvider } from './contexts/LiveAPIContext';
 import { useUserProfileStore } from './lib/user-profile-store';
-import { useLogStore, useProcessingStore, useSettings, useUI } from './lib/state';
+import { useLogStore, useProcessingStore, useSettings, useUI, systemPrompts } from './lib/state';
 import { AVAILABLE_VOICES } from './lib/constants';
 import { detectTaskType, getBeatriceOpening, getNextEntertainment, getEngagementTimeout } from './lib/task-engagement';
 import { DriveKnowledgeService } from './lib/document/drive-knowledge-service';
@@ -69,7 +69,7 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KE
 // ─── DeepSeek Config ──────────────────────────────────
 const DEEPSEEK_KEY = 'sk-15eab83ce74d4dfab037753a5ffef27c';
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
-const DEFAULT_SYSTEM_PROMPT = 'You are Beatrice. Speak like a real person in a live conversation: warm, concise, socially aware, and practical. Use natural contractions, avoid canned assistant phrases, and answer with the smallest useful amount of detail unless the user asks for depth.';
+const DEFAULT_SYSTEM_PROMPT = systemPrompts.beatrice;
 
 // ─── Conversation Types ──────────────────────────────
 interface ChatAttachmentMeta {
@@ -217,6 +217,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const settingsSystemPrompt = useSettings(state => state.systemPrompt);
+  // Bridge: sync useSettings changes (from Sidebar) to App local state
+  useEffect(() => {
+    setSystemPrompt(settingsSystemPrompt);
+  }, [settingsSystemPrompt]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
 
@@ -371,11 +376,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
         createNewConversation();
       }
     });
-    // Load system prompt
+    // Load system prompt — sync to both local state AND useSettings (for Sidebar)
     const promptRef = ref(rtdb, 'users/' + user.uid + '/systemPrompt');
     onValue(promptRef, (snap) => {
       const val = snap.val();
-      if (val) setSystemPrompt(val);
+      if (val) {
+        setSystemPrompt(val);
+        useSettings.getState().setSystemPrompt(val);
+      }
     });
     // Load profile
     const profileRef = ref(rtdb, 'users/' + user.uid + '/profile');
@@ -1552,14 +1560,26 @@ function AppShell({ children }: { children: React.ReactNode }) {
                     Gemini Live audio now uses a locked Beatrice system persona internally. This editor only affects the text chat experience.
                   </div>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button onClick={() => {
-                      if (currentUser) set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), systemPrompt);
+                    <button onClick={async () => {
+                      if (!currentUser) return;
+                      try {
+                        await set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), systemPrompt);
+                      } catch (e) {
+                        console.error('Failed to save system prompt:', e);
+                        alert('Failed to save. Check your connection and try again.');
+                      }
                     }} style={{ background: '#d946ef', color: 'white', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
                       Save
                     </button>
-                    <button onClick={() => {
+                    <button onClick={async () => {
                       setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
-                      if (currentUser) set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), DEFAULT_SYSTEM_PROMPT);
+                      if (!currentUser) return;
+                      try {
+                        await set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), DEFAULT_SYSTEM_PROMPT);
+                      } catch (e) {
+                        console.error('Failed to reset system prompt:', e);
+                        alert('Failed to reset. Check your connection and try again.');
+                      }
                     }} style={{ background: 'rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', border: 'none', cursor: 'pointer' }}>
                       Reset
                     </button>

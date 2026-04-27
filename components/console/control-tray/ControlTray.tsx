@@ -83,18 +83,34 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
   }, [cameraEnabled, setCameraPreviewUrl]);
 
   useEffect(() => {
+    // Buffer chunks and flush in batches to reduce WebSocket frame overhead.
+    // At 128-sample chunks (~125/sec at 16kHz), sending individually creates
+    // dozens of frames/sec. Batching 4 chunks (~32ms audio) cuts frames to
+    // ~31/sec for smoother pipeline throughput.
+    const chunkBuffer: { mimeType: string; data: string }[] = [];
+    const BATCH_SIZE = 4;
+    const flushBuffer = () => {
+      if (chunkBuffer.length === 0) return;
+      const batch = chunkBuffer.splice(0);
+      client.sendRealtimeInput(batch);
+    };
+
     const onData = (base64: string) => {
-      client.sendRealtimeInput([
-        {
-          mimeType: 'audio/pcm;rate=16000',
-          data: base64,
-        },
-      ]);
+      chunkBuffer.push({
+        mimeType: 'audio/pcm;rate=16000',
+        data: base64,
+      });
+      if (chunkBuffer.length >= BATCH_SIZE) {
+        flushBuffer();
+      }
     };
 
     const onVolume = (volume: number) => {
       setMicLevel(volume);
     };
+
+    // Safety net: flush partial batches so audio never stalls
+    const flushInterval = setInterval(() => flushBuffer(), 40);
 
     let cancelled = false;
 
@@ -126,16 +142,20 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
     if (connected && !muted && audioRecorder) {
       startAudio();
     } else {
+      chunkBuffer.length = 0;
       audioRecorder.stop();
       setMicLevel(0);
     }
     return () => {
       cancelled = true;
+      flushBuffer();
+      clearInterval(flushInterval);
       audioRecorder.off('data', onData);
       audioRecorder.off('volume', onVolume);
       setMicLevel(0);
     };
   }, [connected, client, muted, audioRecorder, setMicLevel, disconnect, setMicPermission]);
+
 
   useEffect(() => {
     let disposed = false;

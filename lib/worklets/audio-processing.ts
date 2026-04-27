@@ -21,9 +21,9 @@
 const AudioRecordingWorklet = `
 class AudioProcessingWorklet extends AudioWorkletProcessor {
 
-  // send and clear buffer every 512 samples, 
-  // which at 16khz is about 32 times a second (low latency)
-  buffer = new Int16Array(512);
+  // send and clear buffer every 128 samples (native AudioWorklet callback size),
+  // which at 16khz is about 125 times a second (ultra low latency — <8ms per chunk)
+  buffer = new Int16Array(128);
 
   // current write index
   bufferWriteIndex = 0;

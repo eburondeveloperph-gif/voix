@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { customerSupportTools } from './tools/customer-support';
 import { personalAssistantTools } from './tools/personal-assistant';
 import { navigationSystemTools } from './tools/navigation-system';
@@ -57,7 +58,7 @@ You have the ability to remember personal facts, preferences, and important even
 - Use appropriate importance levels: "critical" for core identity/values/rules, "high" for key preferences and important facts, "medium" for general details, "low" for trivial notes.
 `;
 
-const systemPrompts: Record<Template, string> = {
+export const systemPrompts: Record<Template, string> = {
   'customer-support': 'You are a helpful and friendly customer support agent. Be conversational and concise.',
   'personal-assistant': 'You are a helpful and friendly personal assistant. Be proactive and efficient.',
   'navigation-system': 'You are a helpful and friendly navigation assistant. Provide clear and accurate directions.',
@@ -80,14 +81,19 @@ export const useSettings = create<{
   setSystemPrompt: (prompt: string) => void;
   setModel: (model: string) => void;
   setVoice: (voice: string) => void;
-}>(set => ({
-  systemPrompt: systemPrompts.beatrice,
-  model: DEFAULT_LIVE_API_MODEL,
-  voice: DEFAULT_VOICE,
-  setSystemPrompt: prompt => set({ systemPrompt: prompt }),
-  setModel: model => set({ model }),
-  setVoice: voice => set({ voice }),
-}));
+}>()(
+  persist(
+    set => ({
+      systemPrompt: systemPrompts.beatrice,
+      model: DEFAULT_LIVE_API_MODEL,
+      voice: DEFAULT_VOICE,
+      setSystemPrompt: prompt => set({ systemPrompt: prompt }),
+      setModel: model => set({ model }),
+      setVoice: voice => set({ voice }),
+    }),
+    { name: 'beatrice-settings-v1' },
+  ),
+);
 
 /**
  * UI
@@ -172,64 +178,69 @@ export const useTools = create<{
   addTool: () => void;
   removeTool: (toolName: string) => void;
   updateTool: (oldName: string, updatedTool: FunctionCall) => void;
-}>(set => ({
-  tools: beatriceTools,
-  template: 'beatrice',
-  setTemplate: (template: Template) => {
-    set({ tools: toolsets[template], template });
-    useSettings.getState().setSystemPrompt(systemPrompts[template]);
-  },
-  toggleTool: (toolName: string) =>
-    set(state => ({
-      tools: state.tools.map(tool =>
-        tool.name === toolName ? { ...tool, isEnabled: !tool.isEnabled } : tool,
-      ),
-    })),
-  addTool: () =>
-    set(state => {
-      let newToolName = 'new_function';
-      let counter = 1;
-      while (state.tools.some(tool => tool.name === newToolName)) {
-        newToolName = `new_function_${counter++}`;
-      }
-      return {
-        tools: [
-          ...state.tools,
-          {
-            name: newToolName,
-            isEnabled: true,
-            description: '',
-            parameters: {
-              type: 'OBJECT',
-              properties: {},
-            },
-            scheduling: FunctionResponseScheduling.INTERRUPT,
-          },
-        ],
-      };
+}>()(
+  persist(
+    set => ({
+      tools: beatriceTools,
+      template: 'beatrice',
+      setTemplate: (template: Template) => {
+        set({ tools: toolsets[template], template });
+        useSettings.getState().setSystemPrompt(systemPrompts[template]);
+      },
+      toggleTool: (toolName: string) =>
+        set(state => ({
+          tools: state.tools.map(tool =>
+            tool.name === toolName ? { ...tool, isEnabled: !tool.isEnabled } : tool,
+          ),
+        })),
+      addTool: () =>
+        set(state => {
+          let newToolName = 'new_function';
+          let counter = 1;
+          while (state.tools.some(tool => tool.name === newToolName)) {
+            newToolName = `new_function_${counter++}`;
+          }
+          return {
+            tools: [
+              ...state.tools,
+              {
+                name: newToolName,
+                isEnabled: true,
+                description: '',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+                scheduling: FunctionResponseScheduling.INTERRUPT,
+              },
+            ],
+          };
+        }),
+      removeTool: (toolName: string) =>
+        set(state => ({
+          tools: state.tools.filter(tool => tool.name !== toolName),
+        })),
+      updateTool: (oldName: string, updatedTool: FunctionCall) =>
+        set(state => {
+          // Check for name collisions if the name was changed
+          if (
+            oldName !== updatedTool.name &&
+            state.tools.some(tool => tool.name === updatedTool.name)
+          ) {
+            console.warn(`Tool with name "${updatedTool.name}" already exists.`);
+            // Prevent the update by returning the current state
+            return state;
+          }
+          return {
+            tools: state.tools.map(tool =>
+              tool.name === oldName ? updatedTool : tool,
+            ),
+          };
+        }),
     }),
-  removeTool: (toolName: string) =>
-    set(state => ({
-      tools: state.tools.filter(tool => tool.name !== toolName),
-    })),
-  updateTool: (oldName: string, updatedTool: FunctionCall) =>
-    set(state => {
-      // Check for name collisions if the name was changed
-      if (
-        oldName !== updatedTool.name &&
-        state.tools.some(tool => tool.name === updatedTool.name)
-      ) {
-        console.warn(`Tool with name "${updatedTool.name}" already exists.`);
-        // Prevent the update by returning the current state
-        return state;
-      }
-      return {
-        tools: state.tools.map(tool =>
-          tool.name === oldName ? updatedTool : tool,
-        ),
-      };
-    }),
-}));
+    { name: 'beatrice-tools-v1' },
+  ),
+);
 
 /**
  * Logs
