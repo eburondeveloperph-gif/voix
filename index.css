@@ -187,16 +187,16 @@ header {
 /* ─── Glass Effects ─────────────── */
 .glass {
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
 }
 
 .glass-btn {
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #d1d5db;
   font-size: 14px;
@@ -238,8 +238,8 @@ header {
   justify-content: center;
   background: rgba(5, 5, 7, 0.72);
   padding: 24px;
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .modalShroud .modal {
@@ -364,6 +364,7 @@ header {
 
 /* ─── Chat Bubbles ──────────────── */
 .msg-bubble {
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   padding: 16px;
   max-width: 90%;
@@ -411,6 +412,7 @@ header {
 /* ─── History Items ─────────────── */
 .history-item {
   background: rgba(255, 255, 255, 0.03);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
@@ -558,8 +560,8 @@ header {
   align-items: center;
   justify-content: center;
   background: rgba(5, 5, 7, 0.78);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   padding: 24px;
 }
 
@@ -632,8 +634,8 @@ header {
   padding: 28px;
   color: white;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
 }
 
 .workspace-processing-header {
@@ -964,8 +966,8 @@ header {
   position: absolute;
   inset: 0;
   background: rgba(5, 5, 7, 0.72);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .scan-modal {
@@ -1418,8 +1420,8 @@ header {
   position: absolute;
   inset: 0;
   background: rgba(5, 5, 7, 0.72);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .user-profile-modal {
@@ -1618,8 +1620,8 @@ header {
   transform: translateX(-50%);
   width: 88%;
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 24px;
   padding: 12px 24px;
@@ -1653,8 +1655,8 @@ header {
   justify-content: center;
   background: rgba(5, 5, 7, 0.72);
   padding: 24px;
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .popup-content {
@@ -1896,3 +1898,332 @@ aside {
 .z-20 { z-index: 20; }
 
 .shadow-custom { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+
+/* ─── Integrations Page (Settings → Integration tab) ───────── */
+
+.integrations-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.integration-card {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%),
+    rgba(15, 12, 25, 0.55);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 22px;
+  padding: 18px 18px 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 30px -18px rgba(217, 70, 239, 0.18);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.integration-card:hover {
+  border-color: rgba(217, 70, 239, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 36px -18px rgba(217, 70, 239, 0.32);
+}
+
+.integration-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.integration-icon-pill {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: linear-gradient(140deg, rgba(217, 70, 239, 0.2), rgba(126, 34, 206, 0.18));
+  border: 1px solid rgba(217, 70, 239, 0.18);
+  color: #f0abfc;
+  flex-shrink: 0;
+}
+
+.integration-icon-pill.is-whatsapp {
+  background: linear-gradient(140deg, rgba(37, 211, 102, 0.18), rgba(16, 185, 129, 0.12));
+  border-color: rgba(37, 211, 102, 0.22);
+  color: #6ee7b7;
+}
+
+.integration-icon-pill.is-zapier {
+  background: linear-gradient(140deg, rgba(255, 74, 0, 0.18), rgba(217, 70, 239, 0.14));
+  border-color: rgba(255, 74, 0, 0.22);
+  color: #fdba74;
+}
+
+.integration-icon-pill.is-ollama {
+  background: linear-gradient(140deg, rgba(167, 139, 250, 0.22), rgba(99, 102, 241, 0.18));
+  border-color: rgba(167, 139, 250, 0.28);
+  color: #c4b5fd;
+}
+
+.integration-card-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integration-card-title h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+
+.integration-card-title p {
+  margin: 0;
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.45;
+}
+
+.integration-status-pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #9ca3af;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.integration-status-pill.is-on {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.22);
+}
+
+.integration-status-pill.is-warn {
+  color: #fde68a;
+  background: rgba(250, 204, 21, 0.08);
+  border-color: rgba(250, 204, 21, 0.2);
+}
+
+.integration-card p.integration-card-blurb {
+  margin: 6px 0 14px;
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.55;
+}
+
+.integration-card p.integration-card-blurb a {
+  color: #f0abfc;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(240, 171, 252, 0.4);
+}
+
+.integration-card p.integration-card-blurb a:hover {
+  color: #f5d0fe;
+}
+
+.integration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.integration-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.integration-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: #fafafa;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  font-family: inherit;
+}
+
+.integration-input::placeholder {
+  color: rgba(156, 163, 175, 0.55);
+}
+
+.integration-input:focus {
+  border-color: rgba(217, 70, 239, 0.5);
+  background: rgba(217, 70, 239, 0.04);
+  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.12);
+}
+
+.integration-input.is-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+.integration-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.integration-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.15s ease, background 0.2s ease;
+  font-family: inherit;
+}
+
+.integration-btn-primary {
+  color: #ffffff;
+  background: linear-gradient(140deg, #d946ef, #a21caf 70%, #7e22ce);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 20px -8px rgba(217, 70, 239, 0.6);
+}
+
+.integration-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px -10px rgba(217, 70, 239, 0.7);
+}
+
+.integration-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.integration-btn-secondary {
+  color: #d1d5db;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.integration-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
+}
+
+.integration-btn-danger {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.18);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.integration-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fee2e2;
+}
+
+.integration-status-msg {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.integration-status-msg.is-ok { color: #86efac; }
+.integration-status-msg.is-warn { color: #fde68a; }
+.integration-status-msg.is-err { color: #fca5a5; }
+.integration-status-msg.is-busy { color: #c4b5fd; }
+
+.zap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.zap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.zap-row:hover {
+  border-color: rgba(255, 74, 0, 0.22);
+  background: rgba(255, 74, 0, 0.03);
+}
+
+.zap-row-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: linear-gradient(140deg, rgba(255, 74, 0, 0.2), rgba(217, 70, 239, 0.14));
+  border: 1px solid rgba(255, 74, 0, 0.2);
+  color: #fdba74;
+}
+
+.zap-row-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zap-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.zap-row-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.zap-row-url {
+  font-size: 10px;
+  color: #6b7280;
+  word-break: break-all;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.integration-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  margin: 4px 0 0;
+  border: 0;
+}
+

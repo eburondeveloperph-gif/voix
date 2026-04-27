@@ -24,6 +24,7 @@ import {
   normalizeWhitespace,
   nowIso,
 } from '@/lib/document/utils';
+import { useScanChatBridge, type ScanChatSource } from '@/lib/scan-chat-bridge';
 
 const DEFAULT_REQUEST = 'Beatrice, upload this file and use it as context.';
 
@@ -356,6 +357,33 @@ export default function DocumentScannerModal() {
         text: summaryText,
         isFinal: true,
       });
+
+      // ── Realtime bridge into the chat ────────────────────────
+      // Forward the OCR result to the chat composer so the user can keep
+      // talking to Beatrice about it via the text channel (DeepSeek). App.tsx
+      // subscribes to useScanChatBridge and fires sendChatMessage() with the
+      // extracted text + image preview as an inline attachment.
+      try {
+        const previewDataUrl =
+          (finalized.raw_image_data_url as string | null) ||
+          processedPages[0]?.dataUrl ||
+          null;
+        useScanChatBridge.getState().push({
+          userRequest: requestText || DEFAULT_REQUEST,
+          extractedText: (finalized.ocr?.cleaned_text || '').slice(0, 6000),
+          summary: summaryText || finalized.analysis?.short_summary || '',
+          title: finalized.title || 'Scanned document',
+          source: source as ScanChatSource,
+          imageDataUrl: previewDataUrl,
+          language: finalized.ocr?.detected_language,
+          filename: finalized.source_name,
+          mimeType:
+            (finalized.image_metadata?.mime_type as string) ||
+            (source === 'camera_scan' || source === 'gallery_upload' ? 'image/png' : undefined),
+        });
+      } catch (bridgeErr) {
+        console.warn('Scan-chat bridge push failed:', bridgeErr);
+      }
 
       if (connected) {
         client.send(

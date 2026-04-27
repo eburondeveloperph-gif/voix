@@ -43,6 +43,9 @@ import {
 import { buildConversationContext, contextToSystemInstruction } from '@/lib/conversation-context';
 import { getBeatriceOpening, type TaskInfo } from '@/lib/task-engagement';
 import { ConversationMemory } from '@/lib/conversation-memory';
+import { loadHistoryContextForSession } from '@/lib/conversation-history';
+import { KnowledgeBase } from '@/lib/knowledge-base';
+import { CORE_BEHAVIOUR_REMINDER } from '@/lib/prompts/conversational-base';
 
 export type UseLiveApiResults = {
   client: GenAILiveClient;
@@ -110,10 +113,19 @@ export function useLiveApi({
 
   useEffect(() => {
     let silenceTimer: ReturnType<typeof setInterval> | null = null;
-    let lastActivityTime = Date.now();
+    // We track *user* activity separately from agent activity. The auto-stop
+    // fires after 30s without a user signal (mic input, transcription, manual
+    // send), regardless of whether Beatrice is mid-utterance.
+    let lastUserActivityTime = Date.now();
+    let lastAnyActivityTime = Date.now();
+    const SILENCE_AUTO_STOP_MS = 30_000;
 
-    const resetSilenceTimer = () => {
-      lastActivityTime = Date.now();
+    const resetUserActivity = () => {
+      lastUserActivityTime = Date.now();
+      lastAnyActivityTime = Date.now();
+    };
+    const resetAnyActivity = () => {
+      lastAnyActivityTime = Date.now();
     };
 
     const onOpen = () => {
@@ -123,20 +135,31 @@ export function useLiveApi({
         .catch(err => {
           console.error('Error resuming audio output:', err);
         });
-      resetSilenceTimer();
+      resetUserActivity();
       silenceTimer = setInterval(() => {
-        if (Date.now() - lastActivityTime > 45000) {
-          client.send([{
-            text: 'System command: There has been a long pause. If it feels socially useful, check in with one short natural sentence. If the silence feels intentional, stay quiet.',
-          }], true);
-          resetSilenceTimer();
+        const now = Date.now();
+        const idleForUser = now - lastUserActivityTime;
+        // Don't tear down while Beatrice is actively speaking.
+        const agentIdle = now - lastAnyActivityTime > 1500;
+        if (idleForUser > SILENCE_AUTO_STOP_MS && agentIdle) {
+          // 30s with no user signal → stop the live audio session entirely.
+          // The mic + speakers are released; the user can tap to reconnect.
+          console.info('[Live] Auto-stopping live audio after 30s of user silence.');
+          try {
+            client.disconnect();
+          } catch (e) {
+            console.warn('Auto-stop disconnect failed:', e);
+          }
         }
       }, 1000);
     };
 
     const onClose = () => {
       setConnected(false);
-      if (silenceTimer) clearInterval(silenceTimer);
+      if (silenceTimer) {
+        clearInterval(silenceTimer);
+        silenceTimer = null;
+      }
     };
 
     const stopAudioStreamer = () => {
@@ -144,14 +167,16 @@ export function useLiveApi({
         audioStreamerRef.current.stop();
       }
       setVolume(0);
-      resetSilenceTimer();
+      // 'interrupted' = user spoke over Beatrice → counts as user activity.
+      resetUserActivity();
     };
 
     const onAudio = (data: ArrayBuffer) => {
       ensureAudioStreamer()
         .then(streamer => {
           streamer.addPCM16(new Uint8Array(data));
-          resetSilenceTimer();
+          // Agent speaking — reset *any* activity but NOT user activity.
+          resetAnyActivity();
         })
         .catch(err => {
           console.error('Error handling output audio:', err);
@@ -163,54 +188,82 @@ export function useLiveApi({
     client.on('close', onClose);
     client.on('interrupted', stopAudioStreamer);
     client.on('audio', onAudio);
-    client.on('turncomplete', resetSilenceTimer);
-    client.on('inputTranscription', resetSilenceTimer);
-    client.on('outputTranscription', resetSilenceTimer);
-    client.on('content', resetSilenceTimer);
+    client.on('turncomplete', resetAnyActivity);
+    client.on('inputTranscription', resetUserActivity); // user spoke
+    client.on('outputTranscription', resetAnyActivity); // agent spoke
+    client.on('content', resetAnyActivity);
 
     const onSetupComplete = () => {
       const profile = useUserProfileStore.getState().profile;
 
-      // Load conversation memories asynchronously and inject them
-      ConversationMemory.loadUserContext().then(memoryContext => {
+      const sendGreeting = () => {
+        if (profile && !profile.onboarding_completed) {
+          client.send([{
+            text: 'System command: A new Jo Lernout associate has joined. Ask how they would like to be addressed in one relaxed, human sentence.',
+          }], true);
+        } else if (profile) {
+          client.send([{
+            text: `System command: Connection established. Greet "${profile.preferred_address}" like a real person on a live call. Keep it one short sentence, no assistant catchphrase. If [USER HISTORY CONTEXT] mentioned an open thread, you may briefly reference it.`,
+          }], true);
+        } else {
+          client.send([{ text: 'System command: Connection established. Greet the user like a real person on a live call. Keep it one short sentence, no assistant catchphrase.' }], true);
+        }
+      };
+
+      // 0) Re-anchor on the universal conversational base. Sent first so the
+      //    AI re-reads "speak like a real human" rules at every session start,
+      //    regardless of which persona is active.
+      try {
+        client.send([{ text: CORE_BEHAVIOUR_REMINDER }], true);
+      } catch (e) {
+        console.warn('Core-behaviour reminder send failed:', e);
+      }
+
+      // 1) Knowledge-base table of contents (synchronous — built from local
+      //    state). Sent first so it sits at the top of Beatrice's context.
+      try {
+        const kbBlock = KnowledgeBase.buildContextBlock();
+        if (kbBlock) {
+          client.send([{ text: kbBlock }], true);
+        }
+      } catch (e) {
+        console.warn('Knowledge-base context block failed:', e);
+      }
+
+      // 2) Load explicit fact memories AND past-conversation history in parallel,
+      //    then inject both before the greeting so Beatrice opens the call with
+      //    memory of who they are and what was last discussed.
+      Promise.allSettled([
+        ConversationMemory.loadUserContext(),
+        loadHistoryContextForSession({ apiKey }),
+      ]).then(([memRes, histRes]) => {
+        const memoryContext = memRes.status === 'fulfilled' ? memRes.value : '';
+        const historyContext = histRes.status === 'fulfilled' ? histRes.value : '';
+
         if (memoryContext) {
           client.send([{
             text: `[CONVERSATION MEMORY CONTEXT]: ${memoryContext}`,
           }], true);
         }
 
-        // Then send the greeting
-        if (profile && !profile.onboarding_completed) {
+        if (historyContext) {
           client.send([{
-            text: 'System command: A new Jo Lernout associate has joined. Ask how they would like to be addressed in one relaxed, human sentence.',
+            text: historyContext,
           }], true);
-        } else if (profile) {
-          client.send([{
-            text: `System command: Connection established. Greet "${profile.preferred_address}" like a real person on a live call. Keep it one short sentence, no assistant catchphrase.`,
-          }], true);
-        } else {
-          client.send([{ text: 'System command: Connection established. Greet the user like a real person on a live call. Keep it one short sentence, no assistant catchphrase.' }], true);
         }
+
+        sendGreeting();
       }).catch(() => {
-        // Fallback: send greeting without memory context
-        if (profile && !profile.onboarding_completed) {
-          client.send([{
-            text: 'System command: A new Jo Lernout associate has joined. Ask how they would like to be addressed in one relaxed, human sentence.',
-          }], true);
-        } else if (profile) {
-          client.send([{
-            text: `System command: Connection established. Greet "${profile.preferred_address}" like a real person on a live call. Keep it one short sentence, no assistant catchphrase.`,
-          }], true);
-        } else {
-          client.send([{ text: 'System command: Connection established. Greet the user like a real person on a live call. Keep it one short sentence, no assistant catchphrase.' }], true);
-        }
+        // Last-resort fallback: skip context, still greet
+        sendGreeting();
       });
-      resetSilenceTimer();
+      resetUserActivity();
     };
     client.on('setupcomplete', onSetupComplete);
 
     const onToolCall = async (toolCall: LiveServerToolCall) => {
-      resetSilenceTimer();
+      // Tool call counts as user-driven activity — reset both timers.
+      resetUserActivity();
       const { setGeneratingTask } = useUI.getState();
       const processingStore = useProcessingStore.getState();
 
@@ -427,10 +480,10 @@ export function useLiveApi({
       client.off('audio', onAudio);
       client.off('setupcomplete', onSetupComplete);
       client.off('toolcall', onToolCall);
-      client.off('turncomplete', resetSilenceTimer);
-      client.off('inputTranscription', resetSilenceTimer);
-      client.off('outputTranscription', resetSilenceTimer);
-      client.off('content', resetSilenceTimer);
+      client.off('turncomplete', resetAnyActivity);
+      client.off('inputTranscription', resetUserActivity);
+      client.off('outputTranscription', resetAnyActivity);
+      client.off('content', resetAnyActivity);
       if (silenceTimer) clearInterval(silenceTimer);
     };
   }, [client, ensureAudioStreamer]);

@@ -4,6 +4,9 @@
   ],
   "hints": {
     "compat-api/css": "off",
-    "compat-api/html": "off"
+    "compat-api/html": "off",
+    "no-inline-styles": "off",
+    "axe/aria": "off",
+    "axe/name-role-value": "off"
   }
 }

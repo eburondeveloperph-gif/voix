@@ -19,6 +19,9 @@ import * as visionAgent from './vision-agent';
 import * as customerSupportAgent from './customer-support-agent';
 import * as eburonflixAgent from './eburonflix-agent';
 import * as conversationMemoryAgent from './conversation-memory-agent';
+import * as knowledgeBaseAgent from './knowledge-base-agent';
+import * as whatsappAgent from './whatsapp-agent';
+import * as zapierAgent from './zapier-agent';
 
 /**
  * Each entry maps a tool name or name prefix to its handler.
@@ -76,6 +79,16 @@ registry.set('eburonflix_', { handler: eburonflixAgent.handle, prefix: true });
 registry.set('remember_this', { handler: conversationMemoryAgent.handle, prefix: false });
 registry.set('remember_that', { handler: conversationMemoryAgent.handle, prefix: false });
 registry.set('conversation_memory_', { handler: conversationMemoryAgent.handle, prefix: true });
+registry.set('conversation_history_', { handler: conversationMemoryAgent.handle, prefix: true });
+
+// ── Knowledge Base Agent (/files) ──────────────────────
+registry.set('knowledge_base_', { handler: knowledgeBaseAgent.handle, prefix: true });
+
+// ── WhatsApp Agent (Meta Cloud API) ───────────────────
+registry.set('whatsapp_', { handler: whatsappAgent.handle, prefix: true });
+
+// ── Zapier Agent (Catch Hook webhooks) ────────────────
+registry.set('zapier_', { handler: zapierAgent.handle, prefix: true });
 
 /**
  * Routes a tool call to the correct specialized agent.

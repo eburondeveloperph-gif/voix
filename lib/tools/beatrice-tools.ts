@@ -87,12 +87,11 @@ export const beatriceTools: FunctionCall[] = [
   },
   {
     name: 'gmail_read',
-    description: 'Reads recent emails from Gmail.',
+    description: 'Reads all matching emails from the user\'s Gmail inbox. Returns every email matching the query so the user never misses anything — always fetch up to 500.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        query: { type: 'STRING', description: 'Optional search query to filter emails.' },
-        limit: { type: 'INTEGER', description: 'Number of emails to fetch.' }
+        query: { type: 'STRING', description: 'Optional search query to filter emails. Examples: "is:unread", "from:someone@gmail.com", "subject:invoice", or any Gmail search syntax.' },
       },
       required: [],
     },
@@ -543,6 +542,167 @@ export const beatriceTools: FunctionCall[] = [
         memoryId: {
           type: 'STRING',
           description: 'Optional explicit memory id to forget.',
+        },
+      },
+      required: [],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.WHEN_IDLE,
+  },
+  {
+    name: 'knowledge_base_list',
+    description: 'Lists every document in Beatrice\'s permanent knowledge base (the /files folder — Eburon business plan, financial plan, etc.). Use when the user asks "what files do you know?", "what\'s in your knowledge base?", or before answering questions that may be grounded in those documents.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
+      required: [],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.WHEN_IDLE,
+  },
+  {
+    name: 'knowledge_base_search',
+    description: 'Searches Beatrice\'s permanent knowledge base (the /files folder — Eburon business plan, financial plan, etc.) for content matching a query. Use this to ground answers about Eburon, the business plan, financial projections, hypotheses, sales/clients/products, or anything that should come from the official source documents instead of being guessed.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: {
+          type: 'STRING',
+          description: 'Natural language query, in any language. The search runs over the full document text.',
+        },
+        limit: {
+          type: 'INTEGER',
+          description: 'Maximum number of matching documents to return. Default 3, max 8.',
+        },
+      },
+      required: ['query'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'knowledge_base_get',
+    description: 'Fetches the text of a specific document from Beatrice\'s permanent knowledge base by id or title (e.g. "Eburon Financial Plan v8"). Use after knowledge_base_search when the user wants details from one specific file.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        idOrTitle: {
+          type: 'STRING',
+          description: 'Document id (from knowledge_base_search) or a title fragment.',
+        },
+        maxChars: {
+          type: 'INTEGER',
+          description: 'Cap on returned characters. Default 3500.',
+        },
+      },
+      required: ['idOrTitle'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'whatsapp_send_message',
+    description: 'Send a WhatsApp message via the user\'s configured WhatsApp Business account (Meta Cloud API). Use when the user says "WhatsApp X to ...", "send a WhatsApp", "text on WhatsApp", or asks Beatrice to forward something via WhatsApp. If WhatsApp is not configured, suggest opening Settings → Integration. Per-user.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        message: {
+          type: 'STRING',
+          description: 'The full message body to send. Up to 4096 characters.',
+        },
+        to: {
+          type: 'STRING',
+          description: 'Recipient phone number in E.164 format (e.g. "+32475123456"). If omitted, uses the configured default recipient.',
+        },
+        previewUrl: {
+          type: 'BOOLEAN',
+          description: 'Whether WhatsApp should render a preview for the first URL in the message body. Default false.',
+        },
+      },
+      required: ['message'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'whatsapp_send_template',
+    description: 'Send a pre-approved WhatsApp template message (required for messages outside the 24-hour customer-service window). Use only when the user names a template they have approved in Meta Business Manager.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        templateName: {
+          type: 'STRING',
+          description: 'Approved template name as it appears in Meta Business Manager.',
+        },
+        languageCode: {
+          type: 'STRING',
+          description: 'Language code for the template, e.g. "en", "fr", "nl". Default "en".',
+        },
+        to: {
+          type: 'STRING',
+          description: 'Recipient phone number, E.164. Falls back to default recipient.',
+        },
+        variables: {
+          type: 'ARRAY',
+          items: { type: 'STRING' },
+          description: 'Ordered values for the template body placeholders ({{1}}, {{2}}, …).',
+        },
+      },
+      required: ['templateName'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'whatsapp_status',
+    description: 'Reports whether WhatsApp is configured for the current user (Phone Number ID + access token present). Useful before suggesting a send.',
+    parameters: { type: 'OBJECT', properties: {}, required: [] },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.WHEN_IDLE,
+  },
+  {
+    name: 'zapier_trigger',
+    description: 'Trigger one of the user\'s registered Zapier zaps (Catch Hook webhooks). Use when the user asks Beatrice to do something that maps to a wired-up zap, such as "send to Slack", "log this to Sheets", "post on Twitter", "save to Notion", or anything that integrates through the user\'s Zapier account. Call zapier_list_zaps first if you don\'t know what\'s available.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        zap: {
+          type: 'STRING',
+          description: 'Name or id of the zap to trigger (matches what is shown in zapier_list_zaps).',
+        },
+        payload: {
+          type: 'OBJECT',
+          description: 'Optional structured JSON payload sent to the zap. If omitted, any other args (except zap/name/id) are forwarded as a flat object.',
+        },
+      },
+      required: ['zap'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'zapier_list_zaps',
+    description: 'Lists every Zapier zap the user has registered with Beatrice (name + description + expected params). Useful before answering "what can you do with Zapier?" or before triggering one.',
+    parameters: { type: 'OBJECT', properties: {}, required: [] },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.WHEN_IDLE,
+  },
+  {
+    name: 'zapier_status',
+    description: 'Reports whether any Zapier zaps are configured.',
+    parameters: { type: 'OBJECT', properties: {}, required: [] },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.WHEN_IDLE,
+  },
+  {
+    name: 'conversation_history_recall',
+    description: 'Fetches a fresh summary of this user\'s past conversations with Beatrice (long-term conversation history, recorded automatically per-user). Use when the user asks "what did we talk about last time?", "do you remember what we discussed before?", "what was that thing we were working on?", or any time you need to refresh your memory of prior sessions beyond what was injected at session start.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        forceRefresh: {
+          type: 'BOOLEAN',
+          description: 'When true, regenerates the digest from raw turns even if a cached one exists. Default false.',
         },
       },
       required: [],

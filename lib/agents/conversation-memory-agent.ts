@@ -11,6 +11,11 @@
 
 import type { AgentHandler, AgentResult } from './types';
 import { ConversationMemory } from '@/lib/conversation-memory';
+import {
+  loadHistoryContextForSession,
+  getHistoryStats,
+  getRecentTurns,
+} from '@/lib/conversation-history';
 
 export const handle: AgentHandler = async (
   toolName: string,
@@ -220,6 +225,46 @@ export const handle: AgentHandler = async (
         status: 'success',
         message: contextString || 'No saved memories for this user yet.',
         data: { context: contextString },
+      };
+    }
+
+    // ── Recall Long-Term Conversation History ──────────
+    case 'conversation_history_recall': {
+      const stats = getHistoryStats(ctx.userId);
+      if (stats.totalTurns === 0) {
+        return {
+          status: 'success',
+          message: 'No prior conversations are on file for this user yet.',
+          data: { totalTurns: 0, digest: '' },
+        };
+      }
+
+      const forceRefresh = Boolean(args.forceRefresh);
+      const digest = await loadHistoryContextForSession({
+        userId: ctx.userId,
+        forceRefresh,
+      });
+
+      // Surface a couple of the latest raw turns too, for grounding
+      const recent = getRecentTurns(ctx.userId, 5).map(t => ({
+        role: t.role,
+        text: t.text,
+        timestamp: t.timestamp,
+        source: t.source,
+      }));
+
+      return {
+        status: 'success',
+        message: digest
+          ? `Recalled ${stats.totalTurns} prior turn${stats.totalTurns === 1 ? '' : 's'} of conversation history.`
+          : 'No usable conversation history could be summarized.',
+        data: {
+          totalTurns: stats.totalTurns,
+          oldestTimestamp: stats.oldestTimestamp,
+          newestTimestamp: stats.newestTimestamp,
+          digest,
+          recent,
+        },
       };
     }
 

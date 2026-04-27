@@ -297,5 +297,45 @@ export function contextToSystemInstruction(ctx: ConversationContext): string {
     );
   }
 
+  // ── Current-conversation working memory ────────────────
+  // Always remind Beatrice of the last few turns so her context survives
+  // tool round-trips, model resets, and long pauses.
+  const recap = buildRunningConversationRecap(ctx.recentTurns);
+  if (recap) {
+    instructions.push(`[CURRENT CONVERSATION SO FAR]\n${recap}`);
+  }
+
   return instructions.join('\n\n');
+}
+
+/**
+ * Build a tight "what we've been talking about" recap from the live turn log.
+ * Caps at 8 turns and 600 characters total so it stays cheap to inject on
+ * every tool call.
+ */
+export function buildRunningConversationRecap(
+  turns: ConversationTurn[],
+  options: { maxTurns?: number; maxChars?: number } = {},
+): string {
+  const maxTurns = options.maxTurns ?? 8;
+  const maxChars = options.maxChars ?? 600;
+  if (!turns || turns.length === 0) return '';
+
+  // Pull the last N user/agent turns (skip noisy system tool-trigger logs).
+  const speech = turns
+    .filter(t => (t.role === 'user' || t.role === 'agent') && t.text?.trim())
+    .slice(-maxTurns);
+  if (speech.length === 0) return '';
+
+  const formatted = speech.map(t => {
+    const who = t.role === 'agent' ? 'Beatrice' : 'User';
+    const line = t.text.replace(/\s+/g, ' ').trim();
+    return `${who}: ${line}`;
+  });
+
+  let out = formatted.join('\n');
+  if (out.length > maxChars) {
+    out = `…${out.slice(out.length - maxChars)}`;
+  }
+  return out;
 }

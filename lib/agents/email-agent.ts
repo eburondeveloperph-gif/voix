@@ -18,8 +18,7 @@ export const handle: AgentHandler = async (toolName, args, _ctx): Promise<AgentR
 
     case 'gmail_read': {
       const query = typeof args.query === 'string' ? args.query : undefined;
-      const limit = typeof args.limit === 'number' ? args.limit : 5;
-      const result = await gmailRead(query, limit);
+      const result = await gmailRead(query, 500);
       if (result.success && result.messages.length > 0) {
         return { status: 'success', message: `Found ${result.messages.length} email(s)`, data: { emails: result.messages } };
       } else if (result.success) {

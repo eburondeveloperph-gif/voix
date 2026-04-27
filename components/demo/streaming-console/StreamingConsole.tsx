@@ -41,6 +41,8 @@ import {
 import { db, isFirestoreRemoteEnabled } from '@/lib/firebase';
 import { collection, query, limit, serverTimestamp, where } from 'firebase/firestore';
 import { safeAddDoc, safeGetDocs } from '@/lib/firestore-safe';
+import { recordTurn as recordHistoryTurn } from '@/lib/conversation-history';
+import { applyConversationalBase } from '@/lib/prompts/conversational-base';
 
 const formatTimestamp = (date: Date) => {
   const pad = (num: number, size = 2) => num.toString().padStart(size, '0');
@@ -215,9 +217,13 @@ export default function StreamingConsole() {
         ],
       }));
 
-    const finalSystemPrompt = template === 'beatrice'
+    // Universal conversational base wraps every persona — Beatrice and any
+    // custom one in equal measure — so "speak like a real human" rules apply
+    // before the persona overlay tweaks tone/identity.
+    const personaSystemPrompt = template === 'beatrice'
       ? buildBeatriceLiveSystemPrompt(UserProfileService.buildProfilePrompt(profile), undefined, BEATRICE_ON_TOP_PERSONA)
       : systemPrompt;
+    const finalSystemPrompt = applyConversationalBase(personaSystemPrompt);
 
     const config = {
       responseModalities: [Modality.AUDIO],
@@ -274,7 +280,13 @@ export default function StreamingConsole() {
           console.error('Error syncing user transcript to Firebase:', e);
         }
 
-        logConversation(addEntry, 'user', text, { 
+        // Long-term conversation history (per-user, fetched at next session start)
+        recordHistoryTurn('user', text, {
+          userId: profile?.user_id || getRuntimeUserIdentity().userId,
+          source: 'voice',
+        }).catch(err => console.warn('History record failed:', err));
+
+        logConversation(addEntry, 'user', text, {
           source: 'voice',
           timestamp: Date.now(),
         });
@@ -358,7 +370,16 @@ export default function StreamingConsole() {
       const last = useLogStore.getState().turns.at(-1);
       if (last && !last.isFinal) {
         updateLastTurn({ isFinal: true });
-        
+
+        // Long-term conversation history — capture Beatrice's final reply too.
+        // (User turns are recorded earlier in handleInputTranscription.)
+        if (last.role === 'agent' && last.text?.trim()) {
+          recordHistoryTurn('agent', last.text, {
+            userId: profile?.user_id || getRuntimeUserIdentity().userId,
+            source: 'voice',
+          }).catch(err => console.warn('History record (agent) failed:', err));
+        }
+
         // Sync final turn to Firebase
         try {
           await safeAddDoc(db, 'turns', {

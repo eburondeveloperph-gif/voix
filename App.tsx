@@ -47,6 +47,15 @@ import Sidebar from './components/Sidebar';
 import { LiveAPIProvider } from './contexts/LiveAPIContext';
 import { useUserProfileStore } from './lib/user-profile-store';
 import { useLogStore, useProcessingStore, useSettings, useUI, systemPrompts } from './lib/state';
+import { recordTurn as recordHistoryTurn } from './lib/conversation-history';
+import { useScanChatBridge, type ScanChatPayload } from './lib/scan-chat-bridge';
+import {
+  useIntegrations,
+  makeZapId,
+  type WhatsAppConfig,
+  type ZapierZap,
+} from './lib/integrations-store';
+import { applyConversationalBase } from './lib/prompts/conversational-base';
 import { AVAILABLE_VOICES } from './lib/constants';
 import { detectTaskType, getBeatriceOpening, getNextEntertainment, getEngagementTimeout } from './lib/task-engagement';
 import { DriveKnowledgeService } from './lib/document/drive-knowledge-service';
@@ -246,6 +255,49 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // Settings
   const [tempValue, setTempValue] = useState(1.0);
   const [settingsTab, setSettingsTab] = useState<'general' | 'integration'>('general');
+  type SaveStatus = { kind: 'idle' | 'saving' | 'saved-local' | 'saved-cloud' | 'error'; message?: string };
+  const [systemPromptSaveStatus, setSystemPromptSaveStatus] = useState<SaveStatus>({ kind: 'idle' });
+  const systemPromptStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashSystemPromptStatus = useCallback((status: SaveStatus, holdMs = 2400) => {
+    if (systemPromptStatusTimerRef.current) {
+      clearTimeout(systemPromptStatusTimerRef.current);
+      systemPromptStatusTimerRef.current = null;
+    }
+    setSystemPromptSaveStatus(status);
+    if (status.kind === 'saved-local' || status.kind === 'saved-cloud' || status.kind === 'error') {
+      systemPromptStatusTimerRef.current = setTimeout(
+        () => setSystemPromptSaveStatus({ kind: 'idle' }),
+        holdMs,
+      );
+    }
+  }, []);
+
+  // ─── Integrations: WhatsApp + Zapier ────────────────
+  const integrationsWhatsApp = useIntegrations(state => state.whatsapp);
+  const integrationsZaps = useIntegrations(state => state.zapier.zaps);
+  const setIntegrationWhatsApp = useIntegrations(state => state.setWhatsApp);
+  const clearIntegrationWhatsApp = useIntegrations(state => state.clearWhatsApp);
+  const upsertIntegrationZap = useIntegrations(state => state.upsertZap);
+  const removeIntegrationZap = useIntegrations(state => state.removeZap);
+
+  // WhatsApp form local state
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState('');
+  const [waAccessToken, setWaAccessToken] = useState('');
+  const [waDefaultRecipient, setWaDefaultRecipient] = useState('');
+  const [waProxyUrl, setWaProxyUrl] = useState('');
+  const [waStatus, setWaStatus] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; message?: string }>({ kind: 'idle' });
+
+  useEffect(() => {
+    setWaPhoneNumberId(integrationsWhatsApp?.phoneNumberId || '');
+    setWaAccessToken(integrationsWhatsApp?.accessToken || '');
+    setWaDefaultRecipient(integrationsWhatsApp?.defaultRecipient || '');
+    setWaProxyUrl(integrationsWhatsApp?.proxyUrl || '');
+  }, [integrationsWhatsApp]);
+
+  // Zapier form local state
+  const [zapName, setZapName] = useState('');
+  const [zapUrl, setZapUrl] = useState('');
+  const [zapDescription, setZapDescription] = useState('');
 
   // Ollama Integration
   const [localCfg, setLocalCfg] = useState<{baseUrl: string; enabled: boolean; model: string}>(() => {
@@ -288,12 +340,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
         void loadProfile();
         loadUserConversations(user);
         void MemoryService.syncRemoteIntoLocal();
-        void PermanentKnowledgeService.syncFilesKnowledgeToMemory().catch(error => {
-          console.warn('Permanent /files knowledge sync skipped:', error);
-        });
       } else {
         clearProfile();
       }
+      // Seed /files into memory for ALL users (including local-dev) so the
+      // knowledge base is always available to Beatrice from the first message.
+      void PermanentKnowledgeService.syncFilesKnowledgeToMemory().catch(error => {
+        console.warn('Permanent /files knowledge sync skipped:', error);
+      });
     });
     return () => unsub();
   }, [clearProfile, loadProfile]);
@@ -436,6 +490,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
     setIsStreaming(true);
     abortRef.current = new AbortController();
 
+    // Long-term conversation history: capture the user message immediately
+    // (per-user, persisted to Firestore so the next session can recall it).
+    recordHistoryTurn('user', msg, {
+      userId: currentUser?.uid,
+      source: 'chat',
+      sessionId: conv.id,
+    }).catch(err => console.warn('History record (user/chat) failed:', err));
+
     // Update conversation
     const updatedConv = { ...conv };
     updatedConv.messages = updatedMessages;
@@ -550,8 +612,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
           statusNote: 'Streaming tokens and building the final answer',
         };
       });
+      // Always prepend the universal conversational base — it's persona-agnostic
+      // and reasserts "speak like a real human" rules every chat turn.
       const apiMessages = [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: applyConversationalBase(systemPrompt) },
         ...updatedMessages.map(m => ({ role: m.role, content: m.content }))
       ];
       const resp = await fetch(DEEPSEEK_URL, {
@@ -622,6 +686,16 @@ function AppShell({ children }: { children: React.ReactNode }) {
       const assistantMsg: Message = { role: 'assistant', content: fullContent, reasoning_content: fullReasoning, timestamp: Date.now() };
       const finalMessages = [...updatedMessages, assistantMsg];
       setChatMessages(finalMessages);
+
+      // Long-term conversation history: capture the assistant reply too
+      if (fullContent?.trim()) {
+        recordHistoryTurn('agent', fullContent, {
+          userId: currentUser?.uid,
+          source: 'chat',
+          sessionId: conv.id,
+        }).catch(err => console.warn('History record (agent/chat) failed:', err));
+      }
+
       const finalConv = { ...updatedConv };
       finalConv.messages = finalMessages;
       finalConv.updatedAt = Date.now();
@@ -682,6 +756,65 @@ function AppShell({ children }: { children: React.ReactNode }) {
     }, 2000);
   }
 
+  // ─── Scan → Chat realtime bridge ─────────────────
+  // When DocumentScannerModal finishes a camera capture, image upload, file
+  // upload, or screenshot, it pushes a ScanChatPayload onto useScanChatBridge.
+  // We pick it up here, switch to the text view, and fire sendChatMessage()
+  // so Beatrice immediately answers in chat (DeepSeek) about the OCR result.
+  const pendingScanForChat = useScanChatBridge(state => state.pending);
+  const consumeScanForChat = useScanChatBridge(state => state.consume);
+  const lastConsumedScanRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingScanForChat) return;
+    if (lastConsumedScanRef.current === pendingScanForChat.id) return;
+    lastConsumedScanRef.current = pendingScanForChat.id;
+
+    const payload: ScanChatPayload = pendingScanForChat;
+    const headerLine =
+      payload.source === 'camera_scan'
+        ? `Camera scan: ${payload.title}`
+        : payload.source === 'screenshot'
+          ? `Screenshot: ${payload.title}`
+          : payload.source === 'gallery_upload'
+            ? `Image upload: ${payload.title}`
+            : `File upload: ${payload.title}`;
+
+    const truncated = (payload.extractedText || '').slice(0, 4000);
+    const truncationNote =
+      payload.extractedText && payload.extractedText.length > truncated.length
+        ? `\n[truncated — ${payload.extractedText.length.toLocaleString()} characters total]`
+        : '';
+
+    const promptParts: string[] = [
+      `📎 ${headerLine}${payload.filename ? ` (${payload.filename})` : ''}`,
+      payload.userRequest ? `User request: ${payload.userRequest}` : '',
+      payload.summary ? `Summary so far:\n${payload.summary}` : '',
+      truncated ? `Extracted text:\n${truncated}${truncationNote}` : '',
+      'Continue this thread in chat. Answer the user\'s request using the extracted text and the /files knowledge base when relevant. Reply naturally — do not restate everything verbatim.',
+    ];
+    const finalText = promptParts.filter(Boolean).join('\n\n');
+
+    const meta: ChatAttachmentMeta | undefined = payload.imageDataUrl
+      ? {
+          kind: payload.mimeType?.startsWith('image/') ? 'image' : 'binary',
+          filename: payload.filename || `${payload.title}.png`,
+          size: payload.imageDataUrl.length, // best-effort byte estimate
+          mimeType: payload.mimeType || 'image/png',
+          imageDataUrl: payload.imageDataUrl,
+        }
+      : undefined;
+
+    // Switch to the chat surface so the new message is visible.
+    if (currentView !== 'view-text') {
+      navigateTo('view-text');
+    }
+
+    // Fire-and-forget — sendChatMessage is async; consume after start.
+    void sendChatMessage(finalText, meta);
+    consumeScanForChat(payload.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingScanForChat, currentView]);
 
   // ─── Media Generation ────────────
   async function sendMediaPrompt(input: string, prefix: string, setter: React.Dispatch<React.SetStateAction<{ role: string; content: string }[]>>) {
@@ -1559,30 +1692,103 @@ function AppShell({ children }: { children: React.ReactNode }) {
                   <div style={{ color: '#9ca3af', fontSize: '12px', marginTop: '8px', lineHeight: 1.5 }}>
                     Gemini Live audio now uses a locked Beatrice system persona internally. This editor only affects the text chat experience.
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button onClick={async () => {
-                      if (!currentUser) return;
-                      try {
-                        await set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), systemPrompt);
-                      } catch (e) {
-                        console.error('Failed to save system prompt:', e);
-                        alert('Failed to save. Check your connection and try again.');
-                      }
-                    }} style={{ background: '#d946ef', color: 'white', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
-                      Save
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      disabled={systemPromptSaveStatus.kind === 'saving'}
+                      onClick={async () => {
+                        const value = systemPrompt;
+                        flashSystemPromptStatus({ kind: 'saving' }, 0);
+                        // 1) Local-first: persist to Zustand (which writes to localStorage).
+                        try {
+                          useSettings.getState().setSystemPrompt(value);
+                        } catch (localErr) {
+                          console.error('Local system-prompt persist failed:', localErr);
+                        }
+                        // 2) Best-effort cloud sync. Never block the user.
+                        if (!currentUser) {
+                          flashSystemPromptStatus({ kind: 'saved-local', message: 'Saved on this device. Sign in to sync to your account.' });
+                          return;
+                        }
+                        try {
+                          await Promise.race([
+                            set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), value),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
+                          ]);
+                          flashSystemPromptStatus({ kind: 'saved-cloud', message: 'Saved to cloud.' });
+                        } catch (e) {
+                          console.warn('Cloud system-prompt sync failed (kept locally):', e);
+                          flashSystemPromptStatus({
+                            kind: 'saved-local',
+                            message: 'Saved on this device. Cloud sync is offline — changes apply now and will sync when reachable.',
+                          }, 4500);
+                        }
+                      }}
+                      style={{
+                        background: systemPromptSaveStatus.kind === 'saving' ? '#7e22ce' : '#d946ef',
+                        color: 'white',
+                        padding: '8px 16px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        border: 'none',
+                        cursor: systemPromptSaveStatus.kind === 'saving' ? 'wait' : 'pointer',
+                        opacity: systemPromptSaveStatus.kind === 'saving' ? 0.85 : 1,
+                      }}>
+                      {systemPromptSaveStatus.kind === 'saving' ? 'Saving…' : 'Save'}
                     </button>
-                    <button onClick={async () => {
-                      setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
-                      if (!currentUser) return;
-                      try {
-                        await set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), DEFAULT_SYSTEM_PROMPT);
-                      } catch (e) {
-                        console.error('Failed to reset system prompt:', e);
-                        alert('Failed to reset. Check your connection and try again.');
-                      }
-                    }} style={{ background: 'rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', border: 'none', cursor: 'pointer' }}>
+                    <button
+                      disabled={systemPromptSaveStatus.kind === 'saving'}
+                      onClick={async () => {
+                        flashSystemPromptStatus({ kind: 'saving' }, 0);
+                        setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
+                        try {
+                          useSettings.getState().setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
+                        } catch (localErr) {
+                          console.error('Local reset persist failed:', localErr);
+                        }
+                        if (!currentUser) {
+                          flashSystemPromptStatus({ kind: 'saved-local', message: 'Reset on this device.' });
+                          return;
+                        }
+                        try {
+                          await Promise.race([
+                            set(ref(rtdb, 'users/' + currentUser.uid + '/systemPrompt'), DEFAULT_SYSTEM_PROMPT),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
+                          ]);
+                          flashSystemPromptStatus({ kind: 'saved-cloud', message: 'Reset and synced.' });
+                        } catch (e) {
+                          console.warn('Cloud reset sync failed (kept locally):', e);
+                          flashSystemPromptStatus({
+                            kind: 'saved-local',
+                            message: 'Reset on this device. Cloud sync is offline.',
+                          }, 4500);
+                        }
+                      }}
+                      style={{ background: 'rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', border: 'none', cursor: 'pointer' }}>
                       Reset
                     </button>
+                    {systemPromptSaveStatus.kind !== 'idle' && (
+                      <span style={{
+                        fontSize: '11px',
+                        color:
+                          systemPromptSaveStatus.kind === 'saved-cloud' ? '#86efac' :
+                          systemPromptSaveStatus.kind === 'saved-local' ? '#fde68a' :
+                          systemPromptSaveStatus.kind === 'error' ? '#fca5a5' : '#9ca3af',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        lineHeight: 1.3,
+                        maxWidth: '100%',
+                      }}>
+                        <i className={
+                          systemPromptSaveStatus.kind === 'saved-cloud' ? 'ph-fill ph-cloud-check' :
+                          systemPromptSaveStatus.kind === 'saved-local' ? 'ph-fill ph-floppy-disk' :
+                          systemPromptSaveStatus.kind === 'saving' ? 'ph ph-spinner-gap' :
+                          'ph-fill ph-warning'
+                        } style={{ fontSize: '14px' }} />
+                        <span>{systemPromptSaveStatus.message || (systemPromptSaveStatus.kind === 'saving' ? 'Saving…' : '')}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
@@ -1765,6 +1971,175 @@ function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </>
                 )}
+
+                {/* ─── WhatsApp Integration ─────────── */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <i className="ph-fill ph-whatsapp-logo" style={{ fontSize: '18px', color: '#25d366' }}></i>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>WhatsApp</span>
+                    <span style={{
+                      fontSize: '10px',
+                      color: integrationsWhatsApp ? '#86efac' : '#9ca3af',
+                      background: integrationsWhatsApp ? 'rgba(134,239,172,0.15)' : 'rgba(255,255,255,0.05)',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      marginLeft: 'auto',
+                    }}>
+                      {integrationsWhatsApp ? 'Configured' : 'Not configured'}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.5 }}>
+                    Beatrice can send WhatsApp messages on your behalf during voice calls. Provide your <strong>WhatsApp Business Phone Number ID</strong> and an <strong>Access Token</strong> from <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" style={{ color: '#25d366' }}>Meta for Developers</a>. Browser CORS may block direct calls — set a Proxy URL (any HTTPS endpoint that forwards JSON to graph.facebook.com) to bypass.
+                  </p>
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Phone Number ID</label>
+                  <input type="text" value={waPhoneNumberId} onChange={e => setWaPhoneNumberId(e.target.value)}
+                    placeholder="e.g. 123456789012345"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Access Token</label>
+                  <input type="password" value={waAccessToken} onChange={e => setWaAccessToken(e.target.value)}
+                    placeholder="EAAxxxxx..."
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Default Recipient (E.164)</label>
+                  <input type="text" value={waDefaultRecipient} onChange={e => setWaDefaultRecipient(e.target.value)}
+                    placeholder="+32475123456"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Optional CORS Proxy URL</label>
+                  <input type="text" value={waProxyUrl} onChange={e => setWaProxyUrl(e.target.value)}
+                    placeholder="https://your-proxy.example/whatsapp"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '12px' }} />
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      disabled={waStatus.kind === 'busy'}
+                      onClick={() => {
+                        const phoneNumberId = waPhoneNumberId.trim();
+                        const accessToken = waAccessToken.trim();
+                        if (!phoneNumberId || !accessToken) {
+                          setWaStatus({ kind: 'err', message: 'Phone Number ID and Access Token are required.' });
+                          return;
+                        }
+                        const cfg: WhatsAppConfig = {
+                          phoneNumberId,
+                          accessToken,
+                          defaultRecipient: waDefaultRecipient.trim() || undefined,
+                          proxyUrl: waProxyUrl.trim() || undefined,
+                          ownerUserId: currentUser?.uid || 'local-dev-user',
+                        };
+                        setIntegrationWhatsApp(cfg);
+                        setWaStatus({ kind: 'ok', message: 'WhatsApp credentials saved on this device.' });
+                        setTimeout(() => setWaStatus({ kind: 'idle' }), 2400);
+                      }}
+                      style={{ background: '#25d366', color: '#0a0a0a', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      Save WhatsApp
+                    </button>
+                    {integrationsWhatsApp && (
+                      <button onClick={() => {
+                        clearIntegrationWhatsApp();
+                        setWaStatus({ kind: 'ok', message: 'WhatsApp credentials cleared.' });
+                        setTimeout(() => setWaStatus({ kind: 'idle' }), 2400);
+                      }}
+                        style={{ background: 'rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', border: 'none', cursor: 'pointer' }}>
+                        Clear
+                      </button>
+                    )}
+                    {waStatus.kind !== 'idle' && (
+                      <span style={{
+                        fontSize: '11px',
+                        color: waStatus.kind === 'ok' ? '#86efac' : waStatus.kind === 'err' ? '#fca5a5' : '#9ca3af',
+                      }}>
+                        {waStatus.message}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ─── Zapier Integration ───────────── */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <i className="ph-fill ph-lightning" style={{ fontSize: '18px', color: '#ff4a00' }}></i>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>Zapier</span>
+                    <span style={{
+                      fontSize: '10px',
+                      color: integrationsZaps.length ? '#86efac' : '#9ca3af',
+                      background: integrationsZaps.length ? 'rgba(134,239,172,0.15)' : 'rgba(255,255,255,0.05)',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      marginLeft: 'auto',
+                    }}>
+                      {integrationsZaps.length} zap{integrationsZaps.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.5 }}>
+                    Add Zapier "Catch Hook" zaps so Beatrice can trigger them in voice. Beatrice will say things like "I'll send that on Slack" — give each zap a clear name (e.g. <code>send-to-slack</code>) and paste its webhook URL.
+                  </p>
+                  {integrationsZaps.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                      {integrationsZaps.map(z => (
+                        <div key={z.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          borderRadius: '12px',
+                        }}>
+                          <i className="ph-fill ph-lightning" style={{ fontSize: '14px', color: '#ff4a00', flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '12px', color: 'white', fontWeight: 500 }}>{z.name}</div>
+                            {z.description && <div style={{ fontSize: '11px', color: '#9ca3af', lineHeight: 1.4 }}>{z.description}</div>}
+                            <div style={{ fontSize: '10px', color: '#6b7280', wordBreak: 'break-all' }}>{z.webhookUrl}</div>
+                          </div>
+                          <button onClick={() => removeIntegrationZap(z.id)}
+                            title="Remove zap"
+                            style={{ background: 'rgba(248,113,113,0.15)', color: '#fca5a5', padding: '4px 8px', borderRadius: '9999px', fontSize: '11px', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                            <i className="ph ph-trash" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Zap name</label>
+                  <input type="text" value={zapName} onChange={e => setZapName(e.target.value)}
+                    placeholder="send-to-slack"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Catch Hook URL</label>
+                  <input type="text" value={zapUrl} onChange={e => setZapUrl(e.target.value)}
+                    placeholder="https://hooks.zapier.com/hooks/catch/.../..../"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
+                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Description (optional)</label>
+                  <input type="text" value={zapDescription} onChange={e => setZapDescription(e.target.value)}
+                    placeholder="Posts a Slack message to #beatrice"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '12px' }} />
+                  <button onClick={() => {
+                    const name = zapName.trim();
+                    const webhookUrl = zapUrl.trim();
+                    if (!name || !webhookUrl) return;
+                    const zap: ZapierZap = {
+                      id: makeZapId(name),
+                      name,
+                      webhookUrl,
+                      description: zapDescription.trim() || undefined,
+                    };
+                    upsertIntegrationZap(zap);
+                    setZapName('');
+                    setZapUrl('');
+                    setZapDescription('');
+                  }}
+                    disabled={!zapName.trim() || !zapUrl.trim()}
+                    style={{
+                      background: zapName.trim() && zapUrl.trim() ? '#ff4a00' : 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '9999px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      border: 'none',
+                      cursor: zapName.trim() && zapUrl.trim() ? 'pointer' : 'not-allowed',
+                      opacity: zapName.trim() && zapUrl.trim() ? 1 : 0.6,
+                    }}>
+                    Add zap
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2074,7 +2449,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
             }}>
               <i className="ph-fill ph-microphone" style={{ fontSize: '22px' }}></i>
             </button>
-            {actionItem('integration-tools', 'ph ph-plugs-connected', 'Integration tools', toggleSidebar)}
+            {actionItem('integrations-page', 'ph ph-plugs-connected', 'Integrations', () => {
+              // Open the dedicated Integrations page (Settings → Integration tab).
+              // Note: this no longer toggles the persona/tools drawer — those live in Settings.
+              setSettingsTab('integration');
+              navigateTo('view-settings');
+            })}
             {navItem('view-profile', 'ph ph-user', 'Profile')}
           </nav>
         );

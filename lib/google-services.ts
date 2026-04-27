@@ -104,7 +104,7 @@ export async function gmailSend(recipient: string, subject: string, body: string
   }
 }
 
-export async function gmailRead(query?: string, limit: number = 5): Promise<{ success: boolean; message?: string; messages: Array<{ id: string; subject: string; from: string; snippet: string; date: string }> }> {
+export async function gmailRead(query?: string, limit: number = 500): Promise<{ success: boolean; message?: string; messages: Array<{ id: string; subject: string; from: string; snippet: string; date: string }> }> {
   try {
     let q = 'in:inbox';
     if (query) q += ` ${query}`;
@@ -115,7 +115,7 @@ export async function gmailRead(query?: string, limit: number = 5): Promise<{ su
     const messages = listData.messages || [];
 
     const result = await Promise.all(
-      messages.slice(0, limit).map(async (m: any) => {
+      messages.map(async (m: any) => {
         const detailResp = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}`);
         const detail = await detailResp.json();
         const headers = detail.payload?.headers || [];
