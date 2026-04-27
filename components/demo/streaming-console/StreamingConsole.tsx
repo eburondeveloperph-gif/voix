@@ -43,6 +43,7 @@ import { collection, query, limit, serverTimestamp, where } from 'firebase/fires
 import { safeAddDoc, safeGetDocs } from '@/lib/firestore-safe';
 import { recordTurn as recordHistoryTurn } from '@/lib/conversation-history';
 import { applyConversationalBase } from '@/lib/prompts/conversational-base';
+import { useVoiceChatBridge } from '@/lib/voice-chat-bridge';
 
 const formatTimestamp = (date: Date) => {
   const pad = (num: number, size = 2) => num.toString().padStart(size, '0');
@@ -73,9 +74,39 @@ const mergeTranscriptText = (previousText: string, incomingText: string) => {
     }
   }
 
+  // Gemini sometimes corrects itself mid-transcription (e.g. changes "I think we
+  // should" to "We definitely need to"). In that case, the texts share little
+  // overlap — replace entirely instead of appending unrelated words.
+  const lcs = longestCommonSubstring(previous, incoming);
+  const similarity = lcs.length / Math.max(previous.length, incoming.length, 1);
+  if (similarity < 0.4) {
+    return incomingText;
+  }
+
   const separator = /[\s([{'"-]$/.test(previous) || /^[\s.,!?;:)\]}'"-]/.test(incoming) ? '' : ' ';
   return `${previous}${separator}${incoming}`;
 };
+
+/** Longest common substring — used to detect Gemini transcription corrections. */
+function longestCommonSubstring(a: string, b: string): string {
+  const m = a.length;
+  const n = b.length;
+  let maxLen = 0;
+  let maxEnd = 0;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+        if (dp[i][j] > maxLen) {
+          maxLen = dp[i][j];
+          maxEnd = i;
+        }
+      }
+    }
+  }
+  return a.slice(maxEnd - maxLen, maxEnd);
+}
 
 const renderContent = (text: string) => {
   // Split by ```json...``` code blocks
@@ -155,6 +186,7 @@ export default function StreamingConsole() {
   const { currentDocument, openScanner } = useDocumentVisionStore();
   const profile = useUserProfileStore(state => state.profile);
   const submitOnboarding = useUserProfileStore(state => state.submitOnboarding);
+  const pushVoiceTranscriptToChat = useVoiceChatBridge(state => state.pushTranscript);
   const turns = useLogStore(state => state.turns);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
@@ -251,69 +283,78 @@ export default function StreamingConsole() {
     setConfig(config);
   }, [setConfig, systemPrompt, tools, voice, template, profile]);
 
+  const handleDeepgramUserTranscript = useCallback(async (text: string, isFinal: boolean) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const { addTurn, updateLastTurn } = useLogStore.getState();
+    const currentTurns = useLogStore.getState().turns;
+    const last = currentTurns[currentTurns.length - 1];
+    if (last && last.role === 'user' && !last.isFinal) {
+      updateLastTurn({
+        text: mergeTranscriptText(last.text, trimmed),
+        isFinal,
+      });
+    } else {
+      addTurn({ role: 'user', text: trimmed, isFinal });
+    }
+
+    if (!isFinal) return;
+
+    try {
+      await safeAddDoc(db, 'turns', {
+        user_id: profile?.user_id || getRuntimeUserIdentity().userId,
+        role: 'user',
+        text: trimmed,
+        timestamp: serverTimestamp(),
+        isFinal: true,
+        source: 'deepgram_voice',
+      });
+    } catch (e) {
+      console.error('Error syncing Deepgram transcript to Firebase:', e);
+    }
+
+    recordHistoryTurn('user', trimmed, {
+      userId: profile?.user_id || getRuntimeUserIdentity().userId,
+      source: 'voice',
+    }).catch(err => console.warn('History record failed:', err));
+
+    logConversation(addEntry, 'user', trimmed, {
+      source: 'deepgram_voice',
+      timestamp: Date.now(),
+    });
+
+    const preferredAddress = extractPreferredAddress(trimmed);
+    if (preferredAddress) {
+      void submitOnboarding({
+        preferred_name: profile?.preferred_name || preferredAddress,
+        preferred_address: preferredAddress,
+      });
+    }
+
+    const intent = VoiceCommandRouter.detectIntent(trimmed);
+    if (intent.intent === 'DOCUMENT_SCAN_INTENT') {
+      useDocumentVisionStore.getState().openScanner({
+        userRequest: trimmed,
+        autoSaveLongMemory: /save|remember|long memory|permanent/i.test(trimmed),
+        saveRequested: /save|remember|long memory|permanent/i.test(trimmed),
+      });
+      useLogStore.getState().addTurn({
+        role: 'system',
+        text: 'Opening Beatrice Document Vision for the current voice request.',
+        isFinal: true,
+      });
+      addEntry('system', 'Opening Beatrice Document Vision', { intent: intent.intent });
+    }
+
+    pushVoiceTranscriptToChat(trimmed);
+  }, [addEntry, profile, pushVoiceTranscriptToChat, submitOnboarding]);
+
   useEffect(() => {
     const { addTurn, updateLastTurn } = useLogStore.getState();
 
     const handleInputTranscription = async (text: string, isFinal: boolean) => {
-      const turns = useLogStore.getState().turns;
-      const last = turns[turns.length - 1];
-      if (last && last.role === 'user' && !last.isFinal) {
-        updateLastTurn({
-          text: mergeTranscriptText(last.text, text),
-          isFinal,
-        });
-      } else {
-        addTurn({ role: 'user', text, isFinal });
-      }
-
-      // Log to test store when final
-      if (isFinal) {
-        try {
-          await safeAddDoc(db, 'turns', {
-            user_id: profile?.user_id || getRuntimeUserIdentity().userId,
-            role: 'user',
-            text,
-            timestamp: serverTimestamp(),
-            isFinal: true,
-          });
-        } catch (e) {
-          console.error('Error syncing user transcript to Firebase:', e);
-        }
-
-        // Long-term conversation history (per-user, fetched at next session start)
-        recordHistoryTurn('user', text, {
-          userId: profile?.user_id || getRuntimeUserIdentity().userId,
-          source: 'voice',
-        }).catch(err => console.warn('History record failed:', err));
-
-        logConversation(addEntry, 'user', text, {
-          source: 'voice',
-          timestamp: Date.now(),
-        });
-        
-        const preferredAddress = extractPreferredAddress(text);
-        if (preferredAddress) {
-          void submitOnboarding({
-            preferred_name: profile?.preferred_name || preferredAddress,
-            preferred_address: preferredAddress,
-          });
-        }
-
-        const intent = VoiceCommandRouter.detectIntent(text);
-        if (intent.intent === 'DOCUMENT_SCAN_INTENT') {
-          useDocumentVisionStore.getState().openScanner({
-            userRequest: text,
-            autoSaveLongMemory: /save|remember|long memory|permanent/i.test(text),
-            saveRequested: /save|remember|long memory|permanent/i.test(text),
-          });
-          useLogStore.getState().addTurn({
-            role: 'system',
-            text: 'Opening Beatrice Document Vision for the current voice request.',
-            isFinal: true,
-          });
-          addEntry('system', 'Opening Beatrice Document Vision', { intent: intent.intent });
-        }
-      }
+      await handleDeepgramUserTranscript(text, isFinal);
     };
 
     const handleOutputTranscription = (text: string, isFinal: boolean) => {
@@ -416,7 +457,7 @@ export default function StreamingConsole() {
       client.off('content', onContent);
       client.off('turncomplete', handleTurnComplete);
     };
-  }, [addEntry, client, profile, submitOnboarding]);
+  }, [addEntry, client, handleDeepgramUserTranscript, profile, submitOnboarding]);
 
   // Load Long Term Memory / Previous Turns
   useEffect(() => {
@@ -1049,22 +1090,36 @@ export default function StreamingConsole() {
                 />
               )}
               {taskResult.artifactType === 'video' && taskResult.previewData && (
-                <a
-                  href={taskResult.previewData}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    color: '#93c5fd',
-                    textDecoration: 'none',
-                    border: '1px solid rgba(147,197,253,0.25)',
-                    borderRadius: '9999px',
-                    padding: '8px 12px',
-                    width: 'max-content',
-                    maxWidth: '100%',
-                  }}
-                >
-                  Open generated video
-                </a>
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <video
+                    src={taskResult.previewData}
+                    controls
+                    playsInline
+                    style={{
+                      width: '100%',
+                      maxHeight: '280px',
+                      borderRadius: '14px',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      background: 'rgba(0,0,0,0.35)',
+                    }}
+                  />
+                  <a
+                    href={taskResult.previewData}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: '#93c5fd',
+                      textDecoration: 'none',
+                      border: '1px solid rgba(147,197,253,0.25)',
+                      borderRadius: '9999px',
+                      padding: '8px 12px',
+                      width: 'max-content',
+                      maxWidth: '100%',
+                    }}
+                  >
+                    Open generated video
+                  </a>
+                </div>
               )}
               {taskResult.downloadData && (
                 <a
@@ -1086,7 +1141,7 @@ export default function StreamingConsole() {
 
   return (
     <>
-      <ControlTray hidden />
+      <ControlTray hidden onUserTranscript={handleDeepgramUserTranscript} />
       {/* Ambient Background Glows */}
       <div style={styles.ambientGlow1} />
       <div style={styles.ambientGlow2} />

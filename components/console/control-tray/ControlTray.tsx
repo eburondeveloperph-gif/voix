@@ -23,15 +23,17 @@ import cn from 'classnames';
 import { memo, ReactNode, useEffect, useRef, useState } from 'react';
 import { AudioRecorder } from '../../../lib/audio-recorder';
 import { useLogStore, useUI } from '@/lib/state';
+import { createDeepgramRealtimeSession, type DeepgramRealtimeSession } from '@/lib/deepgram';
 
 import { useLiveAPIContext } from '../../../contexts/LiveAPIContext';
 
 export type ControlTrayProps = {
   children?: ReactNode;
   hidden?: boolean;
+  onUserTranscript?: (text: string, isFinal: boolean) => void;
 };
 
-function ControlTray({ children, hidden = false }: ControlTrayProps) {
+function ControlTray({ children, hidden = false, onUserTranscript }: ControlTrayProps) {
   const [audioRecorder] = useState(() => new AudioRecorder());
   const [muted, setMuted] = useState(false);
   const connectButtonRef = useRef<HTMLButtonElement>(null);
@@ -40,6 +42,7 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
   const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraIntervalRef = useRef<number | null>(null);
   const connectedRef = useRef(false);
+  const deepgramSessionRef = useRef<DeepgramRealtimeSession | null>(null);
 
   const {
     client,
@@ -83,41 +86,39 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
   }, [cameraEnabled, setCameraPreviewUrl]);
 
   useEffect(() => {
-    // Concatenate PCM16 base64 chunks into a single blob per flush to minimize
-    // WebSocket frame overhead while keeping latency low. Each individual
-    // sendRealtimeInput call is a separate WebSocket message, so combining
-    // chunks avoids dozens of frames/sec.
-    // BATCH_SIZE=2 keeps accumulation to ~16ms of audio before sending.
-    const chunkBuffer: string[] = [];
-    const BATCH_SIZE = 2;
-    const MIME_TYPE = 'audio/pcm;rate=16000';
-    const flushBuffer = () => {
-      if (chunkBuffer.length === 0) return;
-      const batch = chunkBuffer.splice(0);
-      // Concatenate base64 PCM16 data into a single media blob so the server
-      // receives a continuous audio stream in one WebSocket frame
-      const combinedData = batch.join('');
-      client.sendRealtimeInput([{ mimeType: MIME_TYPE, data: combinedData }]);
-    };
-
     const onData = (base64: string) => {
-      chunkBuffer.push(base64);
-      if (chunkBuffer.length >= BATCH_SIZE) {
-        flushBuffer();
-      }
+      deepgramSessionRef.current?.sendBase64Pcm(base64);
     };
 
     const onVolume = (volume: number) => {
       setMicLevel(volume);
     };
 
-    // Safety net: flush partial batches so audio never stalls
-    const flushInterval = setInterval(() => flushBuffer(), 20);
-
     let cancelled = false;
 
     const startAudio = async () => {
       try {
+        const deepgramSession = await createDeepgramRealtimeSession({
+          onTranscript: payload => onUserTranscript?.(payload.text, payload.isFinal),
+          onOpen: () => {
+            useLogStore.getState().addTurn({
+              role: 'system',
+              text: 'Deepgram realtime STT connected. Voice input will be transcribed into chat.',
+              isFinal: true,
+            });
+          },
+          onError: error => {
+            console.error('Deepgram realtime STT error:', error);
+          },
+          onClose: () => {
+            deepgramSessionRef.current = null;
+          },
+        });
+        if (cancelled) {
+          deepgramSession.close();
+          return;
+        }
+        deepgramSessionRef.current = deepgramSession;
         audioRecorder.on('data', onData);
         audioRecorder.on('volume', onVolume);
         await audioRecorder.start();
@@ -134,7 +135,9 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
             ? 'This browser does not expose microphone capture.'
             : denied
               ? 'Microphone permission was blocked. Allow access in the browser and try again.'
-              : 'Microphone could not be started. Please retry.',
+              : error?.message?.includes('DEEPGRAM')
+                ? error.message
+                : 'Microphone or Deepgram STT could not be started. Please retry.',
         );
         setMicLevel(0);
         disconnect();
@@ -144,19 +147,20 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
     if (connected && !muted && audioRecorder) {
       startAudio();
     } else {
-      chunkBuffer.length = 0;
+      deepgramSessionRef.current?.close();
+      deepgramSessionRef.current = null;
       audioRecorder.stop();
       setMicLevel(0);
     }
     return () => {
       cancelled = true;
-      flushBuffer();
-      clearInterval(flushInterval);
+      deepgramSessionRef.current?.close();
+      deepgramSessionRef.current = null;
       audioRecorder.off('data', onData);
       audioRecorder.off('volume', onVolume);
       setMicLevel(0);
     };
-  }, [connected, client, muted, audioRecorder, setMicLevel, disconnect, setMicPermission]);
+  }, [connected, muted, audioRecorder, setMicLevel, disconnect, setMicPermission, onUserTranscript]);
 
 
   useEffect(() => {
@@ -233,7 +237,7 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
           const previewUrl = canvas.toDataURL('image/jpeg', 0.72);
           setCameraPreviewUrl(previewUrl);
 
-          if (connectedRef.current) {
+          if (connectedRef.current && clientRef.current.status === 'connected') {
             clientRef.current.sendRealtimeInput([
               {
                 mimeType: 'image/jpeg',
