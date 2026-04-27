@@ -187,7 +187,7 @@ ${responseLanguage}`;
 
     try {
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         contents: prompt,
         config: {
           temperature: 0.2,
@@ -275,7 +275,7 @@ ${responseLanguage}`;
 
     try {
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         contents: `You are Beatrice. Use the scanned document context below to answer the user's question accurately. Mention uncertainty if OCR confidence is low.
 
 DOCUMENT TITLE: ${document.title}
