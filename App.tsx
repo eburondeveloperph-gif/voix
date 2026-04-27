@@ -1867,148 +1867,59 @@ function AppShell({ children }: { children: React.ReactNode }) {
               </>
             )}
 
-            {/* ─── Integration Tab (Ollama) ─── */}
+            {/* ─── Integrations Tab — soft modern, theme-synced ─── */}
             {settingsTab === 'integration' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Server URL */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <i className="ph-fill ph-cpu" style={{ fontSize: '18px', color: '#a78bfa' }}></i>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>Ollama Local LLM</span>
-                    <span style={{ fontSize: '10px', color: '#86efac', background: 'rgba(134,239,172,0.15)', padding: '2px 8px', borderRadius: '9999px', marginLeft: 'auto' }}>Local Device</span>
-                  </div>
-                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.5 }}>
-                    Connect to a local Ollama server running on your device. Make sure Ollama is installed and running (<a href="https://ollama.ai" target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>ollama.ai</a>).
-                  </p>
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Server URL</label>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                    <input type="text" defaultValue={localCfg.baseUrl || 'http://168.231.78.113:11434'} onChange={e => ollamaUrlRef.current = e.target.value}
-                      style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none' }}
-                      placeholder="http://168.231.78.113:11434" />
-                    <button onClick={ollamaConnect}
-                      style={{ background: '#a78bfa', color: 'white', padding: '10px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: 500, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Connect
-                    </button>
-                  </div>
-                  <p className={ollamaStatusClass} style={{ fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', background: ollamaStatus.includes('Connected') ? '#4ade80' : ollamaStatus.includes('failed') ? '#f87171' : ollamaStatus.includes('Pulling') ? '#facc15' : '#6b7280' }}></span>
-                    {ollamaStatus}
-                  </p>
-                </div>
+              <div className="integrations-stack">
 
-                {/* Enable / Model Select */}
-                {ollamaStatus.includes('Connected') && (
-                  <>
-                    <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>Use Local LLM</span>
-                        <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px' }}>
-                          <input type="checkbox" checked={localCfg.enabled} onChange={e => ollamaHandleToggle(e.target.checked)}
-                            style={{ opacity: 0, width: 0, height: 0 }} />
-                          <span style={{
-                            position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: '24px', transition: '0.3s',
-                            background: localCfg.enabled ? '#a78bfa' : '#444',
-                          }}>
-                            <span style={{
-                              position: 'absolute', height: '18px', width: '18px', left: localCfg.enabled ? '23px' : '3px', bottom: '3px',
-                              background: 'white', borderRadius: '50%', transition: '0.3s',
-                            }} />
-                          </span>
-                        </label>
-                      </div>
-                      <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Active Model</label>
-                      <select value={localCfg.model} onChange={e => ollamaHandleModelChange(e.target.value)}
-                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', appearance: 'none' }}>
-                        <option value="">None selected</option>
-                        {ollamaModels.map(m => (
-                          <option key={m.name} value={m.name} style={{ backgroundColor: '#0a0a0a' }}>{m.name}</option>
-                        ))}
-                      </select>
-                      {localCfg.enabled && localCfg.model && (
-                        <p style={{ fontSize: '10px', color: '#4ade80', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <i className="ph-fill ph-check-circle"></i> Chat will use {localCfg.model} locally
-                        </p>
-                      )}
+                {/* ─── WhatsApp ─────────────────────── */}
+                <div className="integration-card">
+                  <div className="integration-card-header">
+                    <div className="integration-icon-pill is-whatsapp">
+                      <i className="ph-fill ph-whatsapp-logo" />
                     </div>
-
-                    {/* Pull Model */}
-                    <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px' }}>
-                      <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Pull New Model</label>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input type="text" value={ollamaPullModelValue} onChange={e => setOllamaPullModelValue(e.target.value)}
-                          placeholder="e.g. llama3, mistral, gemma2"
-                          style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none' }} />
-                        <button onClick={() => ollamaPullModel(ollamaPullModelValue)} disabled={ollamaPulling || !ollamaPullModelValue.trim()}
-                          style={{ background: ollamaPulling ? '#6b7280' : '#3b82f6', color: 'white', padding: '10px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: 500, border: 'none', cursor: ollamaPulling ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                          {ollamaPulling ? 'Pulling...' : 'Pull'}
-                        </button>
-                      </div>
+                    <div className="integration-card-title">
+                      <h3>WhatsApp</h3>
                     </div>
-
-                    {/* Installed Models */}
-                    <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <i className="ph ph-database" style={{ fontSize: '16px', color: '#9ca3af' }}></i>
-                        <span style={{ fontSize: '12px', fontWeight: 500, color: '#9ca3af' }}>Installed Models</span>
-                        <span style={{ fontSize: '10px', color: '#6b7280', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '9999px', marginLeft: 'auto' }}>{ollamaModels.length}</span>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {ollamaModels.length === 0 ? (
-                          <span style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>No models installed yet. Pull one above.</span>
-                        ) : (
-                          ollamaModels.map(m => (
-                            <span key={m.name} style={{
-                              fontSize: '11px', padding: '4px 10px', borderRadius: '9999px',
-                              background: m.name === localCfg.model ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
-                              border: m.name === localCfg.model ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.05)',
-                              color: m.name === localCfg.model ? '#c4b5fd' : '#9ca3af',
-                            }}>
-                              {m.name}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* ─── WhatsApp Integration ─────────── */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', marginTop: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <i className="ph-fill ph-whatsapp-logo" style={{ fontSize: '18px', color: '#25d366' }}></i>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>WhatsApp</span>
-                    <span style={{
-                      fontSize: '10px',
-                      color: integrationsWhatsApp ? '#86efac' : '#9ca3af',
-                      background: integrationsWhatsApp ? 'rgba(134,239,172,0.15)' : 'rgba(255,255,255,0.05)',
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                      marginLeft: 'auto',
-                    }}>
+                    <span className={'integration-status-pill' + (integrationsWhatsApp ? ' is-on' : '')}>
                       {integrationsWhatsApp ? 'Configured' : 'Not configured'}
                     </span>
                   </div>
-                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.5 }}>
-                    Beatrice can send WhatsApp messages on your behalf during voice calls. Provide your <strong>WhatsApp Business Phone Number ID</strong> and an <strong>Access Token</strong> from <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" style={{ color: '#25d366' }}>Meta for Developers</a>. Browser CORS may block direct calls — set a Proxy URL (any HTTPS endpoint that forwards JSON to graph.facebook.com) to bypass.
+                  <p className="integration-card-blurb">
+                    Send WhatsApp messages by voice or chat using the Meta Cloud API. Add your <strong>Phone Number ID</strong> and an <strong>Access Token</strong> from{' '}
+                    <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">Meta for Developers</a>. If browser CORS blocks the call, set a Proxy URL that forwards JSON to graph.facebook.com.
                   </p>
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Phone Number ID</label>
-                  <input type="text" value={waPhoneNumberId} onChange={e => setWaPhoneNumberId(e.target.value)}
-                    placeholder="e.g. 123456789012345"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Access Token</label>
-                  <input type="password" value={waAccessToken} onChange={e => setWaAccessToken(e.target.value)}
-                    placeholder="EAAxxxxx..."
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Default Recipient (E.164)</label>
-                  <input type="text" value={waDefaultRecipient} onChange={e => setWaDefaultRecipient(e.target.value)}
-                    placeholder="+32475123456"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Optional CORS Proxy URL</label>
-                  <input type="text" value={waProxyUrl} onChange={e => setWaProxyUrl(e.target.value)}
-                    placeholder="https://your-proxy.example/whatsapp"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '12px' }} />
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button
+
+                  <div className="integration-field">
+                    <label className="integration-field-label">Phone Number ID</label>
+                    <input type="text" className="integration-input is-mono"
+                      value={waPhoneNumberId}
+                      onChange={e => setWaPhoneNumberId(e.target.value)}
+                      placeholder="123456789012345" />
+                  </div>
+                  <div className="integration-field">
+                    <label className="integration-field-label">Access Token</label>
+                    <input type="password" className="integration-input is-mono"
+                      value={waAccessToken}
+                      onChange={e => setWaAccessToken(e.target.value)}
+                      placeholder="EAA…" />
+                  </div>
+                  <div className="integration-field">
+                    <label className="integration-field-label">Default Recipient (E.164)</label>
+                    <input type="text" className="integration-input"
+                      value={waDefaultRecipient}
+                      onChange={e => setWaDefaultRecipient(e.target.value)}
+                      placeholder="+32475123456" />
+                  </div>
+                  <div className="integration-field">
+                    <label className="integration-field-label">CORS Proxy URL (optional)</label>
+                    <input type="text" className="integration-input"
+                      value={waProxyUrl}
+                      onChange={e => setWaProxyUrl(e.target.value)}
+                      placeholder="https://your-proxy.example/whatsapp" />
+                  </div>
+
+                  <div className="integration-action-row">
+                    <button className="integration-btn integration-btn-primary"
                       disabled={waStatus.kind === 'busy'}
                       onClick={() => {
                         const phoneNumberId = waPhoneNumberId.trim();
@@ -2025,120 +1936,224 @@ function AppShell({ children }: { children: React.ReactNode }) {
                           ownerUserId: currentUser?.uid || 'local-dev-user',
                         };
                         setIntegrationWhatsApp(cfg);
-                        setWaStatus({ kind: 'ok', message: 'WhatsApp credentials saved on this device.' });
+                        setWaStatus({ kind: 'ok', message: 'Saved on this device.' });
                         setTimeout(() => setWaStatus({ kind: 'idle' }), 2400);
-                      }}
-                      style={{ background: '#25d366', color: '#0a0a0a', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
-                      Save WhatsApp
+                      }}>
+                      <i className="ph-fill ph-floppy-disk" /> Save
                     </button>
                     {integrationsWhatsApp && (
-                      <button onClick={() => {
-                        clearIntegrationWhatsApp();
-                        setWaStatus({ kind: 'ok', message: 'WhatsApp credentials cleared.' });
-                        setTimeout(() => setWaStatus({ kind: 'idle' }), 2400);
-                      }}
-                        style={{ background: 'rgba(255,255,255,0.1)', color: '#d1d5db', padding: '8px 16px', borderRadius: '9999px', fontSize: '12px', border: 'none', cursor: 'pointer' }}>
+                      <button className="integration-btn integration-btn-secondary"
+                        onClick={() => {
+                          clearIntegrationWhatsApp();
+                          setWaStatus({ kind: 'ok', message: 'Cleared.' });
+                          setTimeout(() => setWaStatus({ kind: 'idle' }), 2400);
+                        }}>
                         Clear
                       </button>
                     )}
                     {waStatus.kind !== 'idle' && (
-                      <span style={{
-                        fontSize: '11px',
-                        color: waStatus.kind === 'ok' ? '#86efac' : waStatus.kind === 'err' ? '#fca5a5' : '#9ca3af',
-                      }}>
+                      <span className={'integration-status-msg ' + (waStatus.kind === 'ok' ? 'is-ok' : waStatus.kind === 'err' ? 'is-err' : 'is-busy')}>
+                        <i className={waStatus.kind === 'ok' ? 'ph-fill ph-check-circle' : waStatus.kind === 'err' ? 'ph-fill ph-warning' : 'ph ph-spinner-gap'} />
                         {waStatus.message}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* ─── Zapier Integration ───────────── */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px', marginTop: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <i className="ph-fill ph-lightning" style={{ fontSize: '18px', color: '#ff4a00' }}></i>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#d1d5db' }}>Zapier</span>
-                    <span style={{
-                      fontSize: '10px',
-                      color: integrationsZaps.length ? '#86efac' : '#9ca3af',
-                      background: integrationsZaps.length ? 'rgba(134,239,172,0.15)' : 'rgba(255,255,255,0.05)',
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                      marginLeft: 'auto',
-                    }}>
+                {/* ─── Zapier ───────────────────────── */}
+                <div className="integration-card">
+                  <div className="integration-card-header">
+                    <div className="integration-icon-pill is-zapier">
+                      <i className="ph-fill ph-lightning" />
+                    </div>
+                    <div className="integration-card-title">
+                      <h3>Zapier</h3>
+                    </div>
+                    <span className={'integration-status-pill' + (integrationsZaps.length ? ' is-on' : '')}>
                       {integrationsZaps.length} zap{integrationsZaps.length === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.5 }}>
-                    Add Zapier "Catch Hook" zaps so Beatrice can trigger them in voice. Beatrice will say things like "I'll send that on Slack" — give each zap a clear name (e.g. <code>send-to-slack</code>) and paste its webhook URL.
+                  <p className="integration-card-blurb">
+                    Trigger any Catch-Hook zap by voice — Slack, Sheets, Notion, anything Zapier touches. Give each zap a clear name (e.g. <code>send-to-slack</code>) and paste its Catch Hook URL.
                   </p>
+
                   {integrationsZaps.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-                      {integrationsZaps.map(z => (
-                        <div key={z.id} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '8px 12px',
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.05)',
-                          borderRadius: '12px',
-                        }}>
-                          <i className="ph-fill ph-lightning" style={{ fontSize: '14px', color: '#ff4a00', flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '12px', color: 'white', fontWeight: 500 }}>{z.name}</div>
-                            {z.description && <div style={{ fontSize: '11px', color: '#9ca3af', lineHeight: 1.4 }}>{z.description}</div>}
-                            <div style={{ fontSize: '10px', color: '#6b7280', wordBreak: 'break-all' }}>{z.webhookUrl}</div>
+                    <>
+                      <div className="integration-subhead">
+                        <span className="dot" /> Registered zaps
+                      </div>
+                      <div className="zap-list">
+                        {integrationsZaps.map(z => (
+                          <div key={z.id} className="zap-row">
+                            <div className="zap-row-icon"><i className="ph-fill ph-lightning" /></div>
+                            <div className="zap-row-meta">
+                              <div className="zap-row-name">{z.name}</div>
+                              {z.description && <div className="zap-row-desc">{z.description}</div>}
+                              <div className="zap-row-url">{z.webhookUrl}</div>
+                            </div>
+                            <button className="integration-btn integration-btn-danger"
+                              onClick={() => removeIntegrationZap(z.id)}
+                              title="Remove zap">
+                              <i className="ph ph-trash" />
+                            </button>
                           </div>
-                          <button onClick={() => removeIntegrationZap(z.id)}
-                            title="Remove zap"
-                            style={{ background: 'rgba(248,113,113,0.15)', color: '#fca5a5', padding: '4px 8px', borderRadius: '9999px', fontSize: '11px', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                            <i className="ph ph-trash" />
+                        ))}
+                      </div>
+                      <hr className="integration-divider" />
+                    </>
+                  )}
+
+                  <div className="integration-subhead">
+                    <span className="dot" /> Add a new zap
+                  </div>
+
+                  <div className="integration-field">
+                    <label className="integration-field-label">Zap name</label>
+                    <input type="text" className="integration-input"
+                      value={zapName}
+                      onChange={e => setZapName(e.target.value)}
+                      placeholder="send-to-slack" />
+                  </div>
+                  <div className="integration-field">
+                    <label className="integration-field-label">Catch Hook URL</label>
+                    <input type="text" className="integration-input is-mono"
+                      value={zapUrl}
+                      onChange={e => setZapUrl(e.target.value)}
+                      placeholder="https://hooks.zapier.com/hooks/catch/…/…/" />
+                  </div>
+                  <div className="integration-field">
+                    <label className="integration-field-label">Description (optional)</label>
+                    <input type="text" className="integration-input"
+                      value={zapDescription}
+                      onChange={e => setZapDescription(e.target.value)}
+                      placeholder="Posts a Slack message to #beatrice" />
+                  </div>
+
+                  <div className="integration-action-row">
+                    <button className="integration-btn integration-btn-primary"
+                      disabled={!zapName.trim() || !zapUrl.trim()}
+                      onClick={() => {
+                        const name = zapName.trim();
+                        const webhookUrl = zapUrl.trim();
+                        if (!name || !webhookUrl) return;
+                        const zap: ZapierZap = {
+                          id: makeZapId(name),
+                          name,
+                          webhookUrl,
+                          description: zapDescription.trim() || undefined,
+                        };
+                        upsertIntegrationZap(zap);
+                        setZapName('');
+                        setZapUrl('');
+                        setZapDescription('');
+                      }}>
+                      <i className="ph-fill ph-plus-circle" /> Add zap
+                    </button>
+                  </div>
+                </div>
+
+                {/* ─── Ollama Local LLM ─────────────── */}
+                <div className="integration-card">
+                  <div className="integration-card-header">
+                    <div className="integration-icon-pill is-ollama">
+                      <i className="ph-fill ph-cpu" />
+                    </div>
+                    <div className="integration-card-title">
+                      <h3>Ollama Local LLM</h3>
+                    </div>
+                    <span className={'integration-status-pill' + (ollamaStatus.includes('Connected') ? ' is-on' : ollamaStatus.includes('failed') ? ' is-warn' : '')}>
+                      {ollamaStatus.includes('Connected') ? 'Connected'
+                        : ollamaStatus.includes('failed') ? 'Failed'
+                        : ollamaStatus.includes('Pulling') ? 'Pulling'
+                        : 'Idle'}
+                    </span>
+                  </div>
+                  <p className="integration-card-blurb">
+                    Run inference on a local Ollama server instead of the cloud. Install from{' '}
+                    <a href="https://ollama.ai" target="_blank" rel="noreferrer">ollama.ai</a> and start it with <code>ollama serve</code>.
+                  </p>
+
+                  <div className="integration-field">
+                    <label className="integration-field-label">Server URL</label>
+                    <div className="integration-inline-row">
+                      <input type="text" className="integration-input is-mono"
+                        defaultValue={localCfg.baseUrl || 'http://168.231.78.113:11434'}
+                        onChange={e => ollamaUrlRef.current = e.target.value}
+                        placeholder="http://168.231.78.113:11434" />
+                      <button className="integration-btn integration-btn-primary"
+                        onClick={ollamaConnect}>
+                        <i className="ph ph-plug" /> Connect
+                      </button>
+                    </div>
+                  </div>
+                  <p className={'integration-status-msg ' + (ollamaStatus.includes('Connected') ? 'is-ok' : ollamaStatus.includes('failed') ? 'is-err' : ollamaStatus.includes('Pulling') ? 'is-warn' : 'is-busy')}>
+                    <span className={'integration-conn-dot ' + (ollamaStatus.includes('Connected') ? 'is-ok' : ollamaStatus.includes('failed') ? 'is-err' : ollamaStatus.includes('Pulling') ? 'is-warn' : '')} />
+                    {ollamaStatus}
+                  </p>
+
+                  {ollamaStatus.includes('Connected') && (
+                    <>
+                      <hr className="integration-divider" />
+
+                      <div className="integration-toggle-row">
+                        <span className="label">Use Local LLM for Chat</span>
+                        <label className="integration-toggle">
+                          <input type="checkbox" checked={localCfg.enabled} onChange={e => ollamaHandleToggle(e.target.checked)} />
+                          <span className="track">
+                            <span className="knob" />
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="integration-field">
+                        <label className="integration-field-label">Active Model</label>
+                        <select value={localCfg.model} onChange={e => ollamaHandleModelChange(e.target.value)}
+                          className="integration-input">
+                          <option value="">None selected</option>
+                          {ollamaModels.map(m => (
+                            <option key={m.name} value={m.name} style={{ backgroundColor: '#0a0a0a' }}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {localCfg.enabled && localCfg.model && (
+                        <p className="integration-status-msg is-ok">
+                          <i className="ph-fill ph-check-circle" /> Chat will use {localCfg.model} locally
+                        </p>
+                      )}
+
+                      <div className="integration-field" style={{ marginTop: '14px' }}>
+                        <label className="integration-field-label">Pull New Model</label>
+                        <div className="integration-inline-row">
+                          <input type="text" className="integration-input"
+                            value={ollamaPullModelValue}
+                            onChange={e => setOllamaPullModelValue(e.target.value)}
+                            placeholder="e.g. llama3, mistral, gemma2" />
+                          <button className="integration-btn integration-btn-primary"
+                            onClick={() => ollamaPullModel(ollamaPullModelValue)}
+                            disabled={ollamaPulling || !ollamaPullModelValue.trim()}>
+                            {ollamaPulling ? <><i className="ph ph-spinner-gap" /> Pulling…</> : <><i className="ph ph-download-simple" /> Pull</>}
                           </button>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+
+                      <hr className="integration-divider" />
+                      <div className="integration-subhead" style={{ marginBottom: '12px' }}>
+                        <span className="dot" /> Installed Models
+                        <span className="integration-status-pill" style={{ marginLeft: 'auto' }}>{ollamaModels.length}</span>
+                      </div>
+                      <div className="integration-chips">
+                        {ollamaModels.length === 0 ? (
+                          <span className="integration-chips-empty">No models installed yet. Pull one above.</span>
+                        ) : (
+                          ollamaModels.map(m => (
+                            <span key={m.name} className={'integration-chip' + (m.name === localCfg.model ? ' is-active' : '')}>
+                              {m.name}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </>
                   )}
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Zap name</label>
-                  <input type="text" value={zapName} onChange={e => setZapName(e.target.value)}
-                    placeholder="send-to-slack"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Catch Hook URL</label>
-                  <input type="text" value={zapUrl} onChange={e => setZapUrl(e.target.value)}
-                    placeholder="https://hooks.zapier.com/hooks/catch/.../..../"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '8px' }} />
-                  <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Description (optional)</label>
-                  <input type="text" value={zapDescription} onChange={e => setZapDescription(e.target.value)}
-                    placeholder="Posts a Slack message to #beatrice"
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px', fontSize: '13px', color: 'white', outline: 'none', marginBottom: '12px' }} />
-                  <button onClick={() => {
-                    const name = zapName.trim();
-                    const webhookUrl = zapUrl.trim();
-                    if (!name || !webhookUrl) return;
-                    const zap: ZapierZap = {
-                      id: makeZapId(name),
-                      name,
-                      webhookUrl,
-                      description: zapDescription.trim() || undefined,
-                    };
-                    upsertIntegrationZap(zap);
-                    setZapName('');
-                    setZapUrl('');
-                    setZapDescription('');
-                  }}
-                    disabled={!zapName.trim() || !zapUrl.trim()}
-                    style={{
-                      background: zapName.trim() && zapUrl.trim() ? '#ff4a00' : 'rgba(255,255,255,0.1)',
-                      color: 'white',
-                      padding: '8px 16px',
-                      borderRadius: '9999px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      border: 'none',
-                      cursor: zapName.trim() && zapUrl.trim() ? 'pointer' : 'not-allowed',
-                      opacity: zapName.trim() && zapUrl.trim() ? 1 : 0.6,
-                    }}>
-                    Add zap
-                  </button>
                 </div>
               </div>
             )}

@@ -1901,174 +1901,234 @@ aside {
 
 /* ─── Integrations Page (Settings → Integration tab) ───────── */
 
+:root {
+  --integ-control-h: 42px;
+  --integ-radius: 22px;
+  --integ-radius-inner: 14px;
+  --integ-border: rgba(255, 255, 255, 0.07);
+  --integ-border-strong: rgba(255, 255, 255, 0.12);
+  --integ-fg: #fafafa;
+  --integ-fg-mute: #9ca3af;
+  --integ-fg-faint: #6b7280;
+  --integ-accent: #d946ef;
+  --integ-accent-deep: #a21caf;
+  --integ-glow: rgba(217, 70, 239, 0.55);
+}
+
 .integrations-stack {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
+/* Card ─────────────────────────────────── */
 .integration-card {
   position: relative;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%),
-    rgba(15, 12, 25, 0.55);
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 22px;
-  padding: 18px 18px 20px;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 100%),
+    rgba(13, 11, 22, 0.78);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid var(--integ-border);
+  border-radius: var(--integ-radius);
+  padding: 20px 20px 22px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 12px 30px -18px rgba(217, 70, 239, 0.18);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 32px -22px rgba(0, 0, 0, 0.7),
+    0 12px 30px -22px rgba(217, 70, 239, 0.22);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .integration-card:hover {
-  border-color: rgba(217, 70, 239, 0.18);
+  border-color: rgba(217, 70, 239, 0.22);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 16px 36px -18px rgba(217, 70, 239, 0.32);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 36px -20px rgba(0, 0, 0, 0.75),
+    0 18px 40px -22px rgba(217, 70, 239, 0.32);
 }
 
+.integration-card:focus-within {
+  border-color: rgba(217, 70, 239, 0.32);
+}
+
+/* Header ──────────────────────────────── */
 .integration-card-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin-bottom: 14px;
 }
 
 .integration-icon-pill {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+  grid-row: 1;
+  grid-column: 1;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  background: linear-gradient(140deg, rgba(217, 70, 239, 0.2), rgba(126, 34, 206, 0.18));
-  border: 1px solid rgba(217, 70, 239, 0.18);
+  line-height: 1;
+  background: linear-gradient(140deg, rgba(217, 70, 239, 0.22), rgba(126, 34, 206, 0.18));
+  border: 1px solid rgba(217, 70, 239, 0.22);
   color: #f0abfc;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .integration-icon-pill.is-whatsapp {
-  background: linear-gradient(140deg, rgba(37, 211, 102, 0.18), rgba(16, 185, 129, 0.12));
-  border-color: rgba(37, 211, 102, 0.22);
+  background: linear-gradient(140deg, rgba(37, 211, 102, 0.22), rgba(16, 185, 129, 0.14));
+  border-color: rgba(37, 211, 102, 0.28);
   color: #6ee7b7;
 }
 
 .integration-icon-pill.is-zapier {
-  background: linear-gradient(140deg, rgba(255, 74, 0, 0.18), rgba(217, 70, 239, 0.14));
-  border-color: rgba(255, 74, 0, 0.22);
+  background: linear-gradient(140deg, rgba(255, 134, 60, 0.24), rgba(217, 70, 239, 0.14));
+  border-color: rgba(255, 134, 60, 0.28);
   color: #fdba74;
 }
 
 .integration-icon-pill.is-ollama {
-  background: linear-gradient(140deg, rgba(167, 139, 250, 0.22), rgba(99, 102, 241, 0.18));
-  border-color: rgba(167, 139, 250, 0.28);
+  background: linear-gradient(140deg, rgba(167, 139, 250, 0.26), rgba(99, 102, 241, 0.18));
+  border-color: rgba(167, 139, 250, 0.32);
   color: #c4b5fd;
 }
 
 .integration-card-title {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  grid-row: 1;
+  grid-column: 2;
   min-width: 0;
 }
 
 .integration-card-title h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--integ-fg);
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
-.integration-card-title p {
-  margin: 0;
-  font-size: 11px;
-  color: #9ca3af;
-  line-height: 1.45;
-}
-
+/* Status pill — sits on the same row as icon + title, never overflows */
 .integration-status-pill {
-  font-size: 10px;
+  grid-row: 1;
+  grid-column: 3;
+  align-self: center;
+  font-size: 10.5px;
   font-weight: 500;
   padding: 4px 10px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--integ-fg-mute);
   white-space: nowrap;
-  flex-shrink: 0;
+  letter-spacing: 0.01em;
 }
 
 .integration-status-pill.is-on {
   color: #6ee7b7;
   background: rgba(52, 211, 153, 0.1);
-  border-color: rgba(52, 211, 153, 0.22);
+  border-color: rgba(52, 211, 153, 0.26);
 }
 
 .integration-status-pill.is-warn {
   color: #fde68a;
-  background: rgba(250, 204, 21, 0.08);
-  border-color: rgba(250, 204, 21, 0.2);
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.24);
 }
 
-.integration-card p.integration-card-blurb {
-  margin: 6px 0 14px;
-  font-size: 12px;
-  color: #9ca3af;
-  line-height: 1.55;
+.integration-card-blurb {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  color: var(--integ-fg-mute);
+  line-height: 1.6;
 }
 
-.integration-card p.integration-card-blurb a {
-  color: #f0abfc;
-  text-decoration: none;
-  border-bottom: 1px dashed rgba(240, 171, 252, 0.4);
-}
-
-.integration-card p.integration-card-blurb a:hover {
+.integration-card-blurb code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(217, 70, 239, 0.1);
   color: #f5d0fe;
 }
 
+.integration-card-blurb a {
+  color: #f0abfc;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(240, 171, 252, 0.45);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.integration-card-blurb a:hover {
+  color: #f5d0fe;
+  border-bottom-color: rgba(245, 208, 254, 0.7);
+}
+
+/* Form fields ─────────────────────────── */
 .integration-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .integration-field-label {
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9ca3af;
+  color: var(--integ-fg-mute);
 }
 
 .integration-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 11px 14px;
+  height: var(--integ-control-h);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--integ-border);
+  border-radius: var(--integ-radius-inner);
+  padding: 0 14px;
   font-size: 13px;
-  color: #fafafa;
+  color: var(--integ-fg);
   outline: none;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   font-family: inherit;
 }
 
-.integration-input::placeholder {
-  color: rgba(156, 163, 175, 0.55);
+textarea.integration-input {
+  height: auto;
+  min-height: calc(var(--integ-control-h) * 2);
+  padding: 12px 14px;
+  resize: vertical;
 }
 
-.integration-input:focus {
-  border-color: rgba(217, 70, 239, 0.5);
-  background: rgba(217, 70, 239, 0.04);
-  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.12);
+select.integration-input {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px;
+}
+
+.integration-input::placeholder {
+  color: rgba(156, 163, 175, 0.5);
+}
+
+.integration-input:hover:not(:focus) {
+  border-color: var(--integ-border-strong);
+}
+
+.integration-input:focus,
+.integration-input:focus-visible {
+  border-color: rgba(217, 70, 239, 0.55);
+  background: rgba(217, 70, 239, 0.045);
+  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.14);
 }
 
 .integration-input.is-mono {
@@ -2077,106 +2137,154 @@ aside {
   letter-spacing: -0.01em;
 }
 
+/* Inline row: input + button on the same line — they share a height */
+.integration-inline-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.integration-inline-row > .integration-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.integration-inline-row > .integration-btn {
+  height: var(--integ-control-h);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Action row at the bottom of a card */
 .integration-action-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
+/* Buttons ─────────────────────────────── */
 .integration-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
+  justify-content: center;
+  gap: 7px;
+  height: var(--integ-control-h);
+  padding: 0 18px;
   border-radius: 9999px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.15s ease, background 0.2s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    opacity 0.15s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
   font-family: inherit;
+  letter-spacing: 0.01em;
+}
+
+.integration-btn i {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .integration-btn-primary {
   color: #ffffff;
-  background: linear-gradient(140deg, #d946ef, #a21caf 70%, #7e22ce);
-  border-color: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 6px 20px -8px rgba(217, 70, 239, 0.6);
+  background: linear-gradient(140deg, #d946ef 0%, #a21caf 60%, #7e22ce 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 22px -10px var(--integ-glow);
 }
 
 .integration-btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 26px -10px rgba(217, 70, 239, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 28px -10px var(--integ-glow);
+}
+
+.integration-btn-primary:active {
+  transform: translateY(0);
 }
 
 .integration-btn-primary:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
 .integration-btn-secondary {
-  color: #d1d5db;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .integration-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
   color: #ffffff;
 }
 
 .integration-btn-danger {
   color: #fca5a5;
-  background: rgba(248, 113, 113, 0.1);
+  background: rgba(248, 113, 113, 0.08);
   border-color: rgba(248, 113, 113, 0.18);
-  padding: 6px 10px;
-  font-size: 11px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 11.5px;
   font-weight: 500;
 }
 
 .integration-btn-danger:hover {
-  background: rgba(248, 113, 113, 0.18);
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.32);
   color: #fee2e2;
 }
 
+/* Status messages (after action) ──────── */
 .integration-status-msg {
-  font-size: 11px;
+  font-size: 11.5px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   line-height: 1.4;
+  font-weight: 500;
 }
 
-.integration-status-msg.is-ok { color: #86efac; }
+.integration-status-msg i { font-size: 13px; line-height: 1; }
+.integration-status-msg.is-ok   { color: #86efac; }
 .integration-status-msg.is-warn { color: #fde68a; }
-.integration-status-msg.is-err { color: #fca5a5; }
+.integration-status-msg.is-err  { color: #fca5a5; }
 .integration-status-msg.is-busy { color: #c4b5fd; }
 
+/* Zap list ────────────────────────────── */
 .zap-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 8px 0 16px;
+  margin: 4px 0 18px;
 }
 
 .zap-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 14px;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--integ-radius-inner);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
 }
 
 .zap-row:hover {
-  border-color: rgba(255, 74, 0, 0.22);
-  background: rgba(255, 74, 0, 0.03);
+  border-color: rgba(255, 134, 60, 0.28);
+  background: rgba(255, 134, 60, 0.045);
 }
 
 .zap-row-icon {
@@ -2188,8 +2296,9 @@ aside {
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  background: linear-gradient(140deg, rgba(255, 74, 0, 0.2), rgba(217, 70, 239, 0.14));
-  border: 1px solid rgba(255, 74, 0, 0.2);
+  line-height: 1;
+  background: linear-gradient(140deg, rgba(255, 134, 60, 0.24), rgba(217, 70, 239, 0.14));
+  border: 1px solid rgba(255, 134, 60, 0.26);
   color: #fdba74;
 }
 
@@ -2198,32 +2307,166 @@ aside {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .zap-row-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: #ffffff;
+  letter-spacing: -0.005em;
 }
 
 .zap-row-desc {
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 11.5px;
+  color: var(--integ-fg-mute);
   line-height: 1.4;
 }
 
 .zap-row-url {
-  font-size: 10px;
-  color: #6b7280;
+  font-size: 10.5px;
+  color: var(--integ-fg-faint);
   word-break: break-all;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: -0.02em;
 }
 
+/* Soft horizontal divider inside a card */
 .integration-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
-  margin: 4px 0 0;
+  margin: 16px 0;
   border: 0;
 }
+
+/* Section heading inside an integration card ("Add a new zap", etc.) */
+.integration-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--integ-fg-mute);
+  margin: 4px 0 10px;
+}
+
+.integration-subhead .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--integ-accent);
+  box-shadow: 0 0 8px var(--integ-glow);
+}
+
+/* Themed toggle switch (used for Ollama "Use Local LLM") ── */
+.integration-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 10px 0 0;
+}
+
+.integration-toggle-row .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.integration-toggle {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.integration-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.integration-toggle .track {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.integration-toggle .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: left 0.25s ease, transform 0.25s ease;
+}
+
+.integration-toggle input:checked + .track {
+  background: linear-gradient(140deg, #d946ef, #7e22ce);
+  border-color: rgba(217, 70, 239, 0.45);
+  box-shadow: 0 0 14px rgba(217, 70, 239, 0.45);
+}
+
+.integration-toggle input:checked + .track .knob {
+  left: 24px;
+}
+
+.integration-toggle input:focus-visible + .track {
+  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.18);
+}
+
+/* Installed-models chips ─────────────── */
+.integration-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.integration-chip {
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--integ-fg-mute);
+  font-weight: 500;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.integration-chip.is-active {
+  background: rgba(217, 70, 239, 0.16);
+  border-color: rgba(217, 70, 239, 0.32);
+  color: #f0abfc;
+  font-weight: 600;
+}
+
+.integration-chips-empty {
+  font-size: 11.5px;
+  color: var(--integ-fg-faint);
+  font-style: italic;
+}
+
+/* Connection dot (Ollama status line) */
+.integration-conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--integ-fg-faint);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+.integration-conn-dot.is-ok    { background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.55); }
+.integration-conn-dot.is-warn  { background: #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, 0.5); }
+.integration-conn-dot.is-err   { background: #f87171; box-shadow: 0 0 8px rgba(248, 113, 113, 0.5); }
 

@@ -83,23 +83,25 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
   }, [cameraEnabled, setCameraPreviewUrl]);
 
   useEffect(() => {
-    // Buffer chunks and flush in batches to reduce WebSocket frame overhead.
-    // At 128-sample chunks (~125/sec at 16kHz), sending individually creates
-    // dozens of frames/sec. Batching 4 chunks (~32ms audio) cuts frames to
-    // ~31/sec for smoother pipeline throughput.
-    const chunkBuffer: { mimeType: string; data: string }[] = [];
-    const BATCH_SIZE = 4;
+    // Concatenate PCM16 base64 chunks into a single blob per flush to minimize
+    // WebSocket frame overhead while keeping latency low. Each individual
+    // sendRealtimeInput call is a separate WebSocket message, so combining
+    // chunks avoids dozens of frames/sec.
+    // BATCH_SIZE=2 keeps accumulation to ~16ms of audio before sending.
+    const chunkBuffer: string[] = [];
+    const BATCH_SIZE = 2;
+    const MIME_TYPE = 'audio/pcm;rate=16000';
     const flushBuffer = () => {
       if (chunkBuffer.length === 0) return;
       const batch = chunkBuffer.splice(0);
-      client.sendRealtimeInput(batch);
+      // Concatenate base64 PCM16 data into a single media blob so the server
+      // receives a continuous audio stream in one WebSocket frame
+      const combinedData = batch.join('');
+      client.sendRealtimeInput([{ mimeType: MIME_TYPE, data: combinedData }]);
     };
 
     const onData = (base64: string) => {
-      chunkBuffer.push({
-        mimeType: 'audio/pcm;rate=16000',
-        data: base64,
-      });
+      chunkBuffer.push(base64);
       if (chunkBuffer.length >= BATCH_SIZE) {
         flushBuffer();
       }
@@ -110,7 +112,7 @@ function ControlTray({ children, hidden = false }: ControlTrayProps) {
     };
 
     // Safety net: flush partial batches so audio never stalls
-    const flushInterval = setInterval(() => flushBuffer(), 40);
+    const flushInterval = setInterval(() => flushBuffer(), 20);
 
     let cancelled = false;
 
