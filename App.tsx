@@ -2446,6 +2446,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 'auto', paddingBottom: '8px' }}>
+            <button onClick={handleLogout} className="glass glass-btn"
+              style={{ width: '100%', borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', color: '#f87171', cursor: 'pointer' }}>
+              <i className="ph ph-sign-out" style={{ fontSize: '18px' }}></i>
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>Log Out</span>
+            </button>
             <button onClick={() => navigateTo('view-settings')} className="glass glass-btn"
               style={{ width: '100%', borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', cursor: 'pointer' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', fontWeight: 500, color: 'white' }}>
@@ -2461,11 +2466,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <i className="ph ph-caret-right" style={{ color: '#6b7280' }}></i>
             </button>
           </div>
-          <button onClick={handleLogout} className="glass glass-btn"
-            style={{ marginTop: '12px', marginBottom: '8px', width: '100%', borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', color: '#f87171', cursor: 'pointer' }}>
-            <i className="ph ph-sign-out" style={{ fontSize: '18px' }}></i>
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>Log Out</span>
-          </button>
         </div>
       </section>
 

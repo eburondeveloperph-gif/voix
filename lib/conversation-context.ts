@@ -15,6 +15,7 @@ import { MemoryService } from './document/memory-service';
 import { detectTaskType, TaskInfo } from './task-engagement';
 import { getEffectiveUserId } from './document/utils';
 import { ConversationMemory } from './conversation-memory';
+import { loadHistoryContextForSession } from './conversation-history';
 
 // ─── Types ────────────────────────────────────────────
 
@@ -164,6 +165,21 @@ export async function buildConversationContext(
     } catch (e) {
       // conversation memory search is best-effort
     }
+  }
+
+  // ── Long-term conversation history context ──────────────
+  // Load the user's past conversation digest to use as long-term memory.
+  // This gives Beatrice awareness of past sessions.
+  try {
+    const historyContext = await loadHistoryContextForSession({ userId: identity.userId });
+    if (historyContext) {
+      memoryContext = memoryContext
+        ? `${memoryContext}\n\n${historyContext}`
+        : historyContext;
+    }
+  } catch (e) {
+    // history loading is best-effort
+    console.warn('Failed to load conversation history context:', e);
   }
 
   // Build active task state
