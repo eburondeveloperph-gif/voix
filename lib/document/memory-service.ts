@@ -1,11 +1,5 @@
-import {
-  collection,
-  query,
-  where,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { isFirestoreRemoteEnabled } from '@/lib/firebase';
-import { safeDeleteDoc, safeGetDocs, safeSetDoc } from '@/lib/firestore-safe';
+import { supabase } from '@/lib/supabase';
 import { DEFAULT_SCAN_MEMORY_SETTINGS } from './constants';
 import {
   DocumentChunkRecord,
@@ -56,12 +50,22 @@ const writeState = (userId: string, state: PersistedDocumentState) => {
   window.localStorage.setItem(getStorageKey(userId), JSON.stringify(state));
 };
 
-const persistRemote = async (collectionName: string, id: string, payload: Record<string, unknown>) => {
-  await safeSetDoc(db, collectionName, id, payload);
+const persistRemote = async (collectionName: string, payload: Record<string, unknown>) => {
+  if (!isFirestoreRemoteEnabled()) return;
+  try {
+    await supabase.from(collectionName).upsert(payload).select();
+  } catch (error) {
+    console.error(`Supabase persistRemote error for ${collectionName}:`, error);
+  }
 };
 
 const removeRemote = async (collectionName: string, id: string) => {
-  await safeDeleteDoc(db, collectionName, id);
+  if (!isFirestoreRemoteEnabled()) return;
+  try {
+    await supabase.from(collectionName).delete().eq('id', id);
+  } catch (error) {
+    console.error(`Supabase removeRemote error for ${collectionName}/${id}:`, error);
+  }
 };
 
 export const MemoryService = {
@@ -221,12 +225,10 @@ export const MemoryService = {
     writeState(userId, next);
 
     await Promise.all([
-      persistRemote('documents', updatedDocument.document_id, updatedDocument as unknown as Record<string, unknown>),
-      persistRemote('memories', memoryRecord.id, memoryRecord as unknown as Record<string, unknown>),
-      persistRemote('scan_events', scanEvent.id, scanEvent as unknown as Record<string, unknown>),
-      ...chunks.map(chunk =>
-        persistRemote('document_chunks', chunk.id, chunk as unknown as Record<string, unknown>),
-      ),
+      persistRemote('documents', { ...updatedDocument as unknown as Record<string, unknown>, updated_at: createdAt }),
+      persistRemote('memories', { ...memoryRecord, updated_at: createdAt }),
+      persistRemote('scan_events', scanEvent),
+      ...chunks.map(chunk => persistRemote('document_chunks', { ...chunk, owner_user_id: userId })),
     ]);
 
     return updatedDocument;
@@ -316,7 +318,7 @@ export const MemoryService = {
 
     const next = updated.find(item => item.id === memoryId);
     if (next) {
-      await persistRemote('memories', memoryId, next as unknown as Record<string, unknown>);
+      await persistRemote('memories', { ...next, updated_at: nowIso() });
     }
   },
 
@@ -325,28 +327,19 @@ export const MemoryService = {
     if (!isFirestoreRemoteEnabled()) return;
 
     try {
-      const [documentsSnapshot, memoriesSnapshot, chunksSnapshot, scanEventsSnapshot] = await Promise.all([
-        safeGetDocs(query(collection(db, 'documents'), where('owner_user_id', '==', userId))),
-        safeGetDocs(query(collection(db, 'memories'), where('owner_user_id', '==', userId))),
-        safeGetDocs(query(collection(db, 'document_chunks'), where('owner_user_id', '==', userId))),
-        safeGetDocs(query(collection(db, 'scan_events'), where('user_id', '==', userId))),
+      const [documentsRes, memoriesRes, chunksRes, scanEventsRes] = await Promise.all([
+        supabase.from('documents').select('*').eq('owner_user_id', userId),
+        supabase.from('memories').select('*').eq('owner_user_id', userId),
+        supabase.from('document_chunks').select('*').eq('owner_user_id', userId),
+        supabase.from('scan_events').select('*').eq('user_id', userId),
       ]);
 
-      if (!documentsSnapshot || !memoriesSnapshot || !chunksSnapshot || !scanEventsSnapshot) {
-        return;
-      }
+      const remoteDocuments = documentsRes.data || [];
+      const remoteMemories = memoriesRes.data || [];
+      const remoteChunks = chunksRes.data || [];
+      const remoteScanEvents = scanEventsRes.data || [];
 
-      const remoteDocuments = documentsSnapshot.docs.map(item => item.data() as ScannedDocumentRecord);
-      const remoteMemories = memoriesSnapshot.docs.map(item => item.data() as LongMemoryRecord);
-      const remoteChunks = chunksSnapshot.docs.map(item => item.data() as DocumentChunkRecord);
-      const remoteScanEvents = scanEventsSnapshot.docs.map(item => item.data() as ScanEventRecord);
-
-      if (
-        remoteDocuments.length === 0 &&
-        remoteMemories.length === 0 &&
-        remoteChunks.length === 0 &&
-        remoteScanEvents.length === 0
-      ) {
+      if (remoteDocuments.length === 0 && remoteMemories.length === 0 && remoteChunks.length === 0 && remoteScanEvents.length === 0) {
         return;
       }
 
@@ -355,27 +348,19 @@ export const MemoryService = {
         ...state,
         documents: [
           ...remoteDocuments,
-          ...state.documents.filter(
-            local => !remoteDocuments.some(remote => remote.document_id === local.document_id),
-          ),
+          ...state.documents.filter(local => !remoteDocuments.some(remote => (remote as ScannedDocumentRecord).document_id === local.document_id)),
         ],
         memories: [
           ...remoteMemories,
-          ...state.memories.filter(
-            local => !remoteMemories.some(remote => remote.id === local.id),
-          ),
+          ...state.memories.filter(local => !remoteMemories.some(remote => (remote as LongMemoryRecord).id === local.id)),
         ],
         chunks: [
           ...remoteChunks,
-          ...state.chunks.filter(
-            local => !remoteChunks.some(remote => remote.id === local.id),
-          ),
+          ...state.chunks.filter(local => !remoteChunks.some(remote => (remote as DocumentChunkRecord).document_id === local.document_id)),
         ],
         scanEvents: [
           ...remoteScanEvents,
-          ...state.scanEvents.filter(
-            local => !remoteScanEvents.some(remote => remote.id === local.id),
-          ),
+          ...state.scanEvents.filter(local => !remoteScanEvents.some(remote => (remote as ScanEventRecord).document_id === local.document_id)),
         ],
       });
     } catch (error) {

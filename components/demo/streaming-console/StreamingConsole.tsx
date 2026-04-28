@@ -38,9 +38,8 @@ import {
   getProcessingServiceKeys,
   type ProcessingServiceKey,
 } from '@/lib/processing-console';
-import { db, isFirestoreRemoteEnabled } from '@/lib/firebase';
-import { collection, query, limit, serverTimestamp, where } from 'firebase/firestore';
-import { safeAddDoc, safeGetDocs } from '@/lib/firestore-safe';
+import { isFirestoreRemoteEnabled } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { recordTurn as recordHistoryTurn } from '@/lib/conversation-history';
 import { applyConversationalBase } from '@/lib/prompts/conversational-base';
 import { useVoiceChatBridge } from '@/lib/voice-chat-bridge';
@@ -304,11 +303,11 @@ export default function StreamingConsole() {
     if (!isFinal) return;
 
     try {
-      await safeAddDoc(db, 'turns', {
+      await supabase.from('turns').insert({
         user_id: profile?.user_id || getRuntimeUserIdentity().userId,
         role: 'user',
         text: trimmed,
-        timestamp: serverTimestamp(),
+        timestamp: new Date().toISOString(),
         isFinal: true,
         source: 'deepgram_voice',
       });
@@ -425,20 +424,20 @@ export default function StreamingConsole() {
 
         // Sync final turn to Firebase
         try {
-          await safeAddDoc(db, 'turns', {
+          await supabase.from('turns').insert({
             user_id: profile?.user_id || getRuntimeUserIdentity().userId,
             role: last.role,
             text: last.text,
-            timestamp: serverTimestamp(),
+            timestamp: new Date().toISOString(),
             isFinal: true
           });
           
           // If it's a significant turn, update "Knowledge" (Long Term Memory)
           if (last.text.length > 20) {
-             await safeAddDoc(db, 'knowledge', {
+             await supabase.from('knowledge').insert({
                user_id: profile?.user_id || 'local-dev-user',
                content: last.text,
-               timestamp: serverTimestamp(),
+               timestamp: new Date().toISOString(),
                source: last.role
              });
           }
@@ -468,22 +467,26 @@ export default function StreamingConsole() {
         await MemoryService.syncRemoteIntoLocal();
         if (!isFirestoreRemoteEnabled()) return;
 
-        const q = query(
-          collection(db, 'turns'),
-          where('user_id', '==', profile?.user_id || 'local-dev-user'),
-          limit(25),
-        );
-        const querySnapshot = await safeGetDocs(q);
-        if (!querySnapshot) return;
+        const { data: queryResult, error } = await supabase
+          .from('turns')
+          .select('*')
+          .eq('user_id', profile?.user_id || 'local-dev-user')
+          .order('timestamp', { ascending: false })
+          .limit(25);
+
+        if (error || !queryResult) {
+          console.error('Failed to load turns:', error);
+          return;
+        }
 
         const previousTurns: ConversationTurn[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          previousTurns.unshift({
-            role: data.role,
-            text: data.text,
-            timestamp: data.timestamp?.toDate() || new Date(),
-            isFinal: true
+        queryResult.forEach((doc: any) => {
+          previousTurns.push({
+            role: doc.role,
+            text: doc.text,
+            timestamp: new Date(doc.timestamp),
+            isFinal: doc.isFinal,
+            source: doc.source,
           });
         });
         previousTurns.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());

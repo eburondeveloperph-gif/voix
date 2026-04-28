@@ -1,5 +1,5 @@
-import { auth, db } from '@/lib/firebase';
-import { safeGetDoc, safeSetDoc } from '@/lib/firestore-safe';
+import { auth } from '@/lib/firebase';
+import { supabase } from './supabase';
 
 export interface UserProfile {
   user_id: string;
@@ -82,7 +82,7 @@ const writeLocalProfile = (profile: UserProfile) => {
 };
 
 export const UserProfileService = {
-  async loadProfile() {
+  async loadProfile(): Promise<UserProfile | null> {
     const { userId, email, displayName, signedIn } = getRuntimeUserIdentity();
     const localProfile = readLocalProfile(userId);
     if (!signedIn) {
@@ -91,11 +91,26 @@ export const UserProfileService = {
       return profile;
     }
 
-    const snapshot = await safeGetDoc(db, 'user_profiles', userId);
-    if (snapshot?.exists()) {
-      const remote = snapshot.data() as UserProfile;
-      writeLocalProfile(remote);
-      return remote;
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Failed to load profile from Supabase:', error);
+        const fallback = localProfile || makeDefaultProfile(userId, email, displayName);
+        writeLocalProfile(fallback);
+        return fallback;
+      }
+
+      if (data) {
+        writeLocalProfile(data as UserProfile);
+        return data as UserProfile;
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
     }
 
     const fallback = localProfile || makeDefaultProfile(userId, email, displayName);
@@ -103,7 +118,7 @@ export const UserProfileService = {
     return fallback;
   },
 
-  async saveProfile(input: UserProfileInput) {
+  async saveProfile(input: UserProfileInput): Promise<UserProfile> {
     const { userId, email, displayName, signedIn } = getRuntimeUserIdentity();
     const existing = (await this.loadProfile()) || makeDefaultProfile(userId, email, displayName);
     const next: UserProfile = {
@@ -119,13 +134,20 @@ export const UserProfileService = {
     writeLocalProfile(next);
 
     if (signedIn) {
-      await safeSetDoc(db, 'user_profiles', userId, next as unknown as Record<string, unknown>);
+      try {
+        await supabase
+          .from('user_profiles')
+          .upsert({ ...next, updated_at: nowIso() })
+          .eq('user_id', userId);
+      } catch (error) {
+        console.error('Failed to save profile to Supabase:', error);
+      }
     }
 
     return next;
   },
 
-  async saveBeatriceSystemPrompt(prompt: string) {
+  async saveBeatriceSystemPrompt(prompt: string): Promise<UserProfile> {
     const { userId, email, displayName, signedIn } = getRuntimeUserIdentity();
     const existing = (await this.loadProfile()) || makeDefaultProfile(userId, email, displayName);
     const next: UserProfile = {
@@ -139,13 +161,20 @@ export const UserProfileService = {
     writeLocalProfile(next);
 
     if (signedIn) {
-      await safeSetDoc(db, 'user_profiles', userId, next as unknown as Record<string, unknown>);
+      try {
+        await supabase
+          .from('user_profiles')
+          .update({ beatrice_system_prompt: next.beatrice_system_prompt, updated_at: nowIso() })
+          .eq('user_id', userId);
+      } catch (error) {
+        console.error('Failed to save system prompt to Supabase:', error);
+      }
     }
 
     return next;
   },
 
-  async saveAvatarUrl(avatarUrl: string) {
+  async saveAvatarUrl(avatarUrl: string): Promise<UserProfile> {
     const { userId, email, displayName, signedIn } = getRuntimeUserIdentity();
     const existing = (await this.loadProfile()) || makeDefaultProfile(userId, email, displayName);
     const next: UserProfile = {
@@ -159,7 +188,14 @@ export const UserProfileService = {
     writeLocalProfile(next);
 
     if (signedIn) {
-      await safeSetDoc(db, 'user_profiles', userId, next as unknown as Record<string, unknown>);
+      try {
+        await supabase
+          .from('user_profiles')
+          .update({ avatar_url: next.avatar_url, updated_at: nowIso() })
+          .eq('user_id', userId);
+      } catch (error) {
+        console.error('Failed to save avatar URL to Supabase:', error);
+      }
     }
 
     return next;

@@ -12,6 +12,7 @@
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
     "@google/genai": "^1.4.0",
+    "@supabase/supabase-js": "^2.105.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",
     "classnames": "^2.5.1",
