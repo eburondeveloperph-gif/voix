@@ -25,8 +25,6 @@ import { AudioStreamer } from '../../lib/audio-streamer';
 import { audioContext } from '../../lib/utils';
 import VolMeterWorket from '../../lib/worklets/vol-meter';
 import { useLogStore, useProcessingStore, useSettings, useUI } from '@/lib/state';
-import { db } from '../../lib/firebase';
-import { serverTimestamp } from 'firebase/firestore';
 import { safeAddDoc } from '@/lib/firestore-safe';
 import { useUserProfileStore } from '@/lib/user-profile-store';
 import { getRuntimeUserIdentity } from '@/lib/user-profile';
@@ -116,11 +114,10 @@ async function recordSystemToolResponse(payload: ToolExecutionPayload) {
   useLogStore.getState().addTurn({ role: 'system', text: responseMessage, isFinal: true });
 
   try {
-    await safeAddDoc(db, 'turns', {
+    await safeAddDoc('turns', {
       user_id: getRuntimeUserIdentity().userId,
       role: 'system',
       text: responseMessage,
-      timestamp: serverTimestamp(),
       type: 'tool_response',
     });
   } catch (e) {
@@ -321,22 +318,6 @@ export function useLiveApi({
   }, [speakerMuted, connected]);
 
   useEffect(() => {
-    let silenceTimer: ReturnType<typeof setInterval> | null = null;
-    // We track *user* activity separately from agent activity. The auto-stop
-    // fires after 30s without a user signal (mic input, transcription, manual
-    // send), regardless of whether Beatrice is mid-utterance.
-    let lastUserActivityTime = Date.now();
-    let lastAnyActivityTime = Date.now();
-    const SILENCE_AUTO_STOP_MS = 30_000;
-
-    const resetUserActivity = () => {
-      lastUserActivityTime = Date.now();
-      lastAnyActivityTime = Date.now();
-    };
-    const resetAnyActivity = () => {
-      lastAnyActivityTime = Date.now();
-    };
-
     const onOpen = () => {
       setConnected(true);
       ensureAudioStreamer()
@@ -344,31 +325,10 @@ export function useLiveApi({
         .catch(err => {
           console.error('Error resuming audio output:', err);
         });
-      resetUserActivity();
-      silenceTimer = setInterval(() => {
-        const now = Date.now();
-        const idleForUser = now - lastUserActivityTime;
-        // Don't tear down while Beatrice is actively speaking.
-        const agentIdle = now - lastAnyActivityTime > 1500;
-        if (idleForUser > SILENCE_AUTO_STOP_MS && agentIdle) {
-          // 30s with no user signal → stop the live audio session entirely.
-          // The mic + speakers are released; the user can tap to reconnect.
-          console.info('[Live] Auto-stopping live audio after 30s of user silence.');
-          try {
-            client.disconnect();
-          } catch (e) {
-            console.warn('Auto-stop disconnect failed:', e);
-          }
-        }
-      }, 1000);
     };
 
     const onClose = () => {
       setConnected(false);
-      if (silenceTimer) {
-        clearInterval(silenceTimer);
-        silenceTimer = null;
-      }
     };
 
     const stopAudioStreamer = () => {
@@ -376,16 +336,12 @@ export function useLiveApi({
         audioStreamerRef.current.stop();
       }
       setVolume(0);
-      // 'interrupted' = user spoke over Beatrice → counts as user activity.
-      resetUserActivity();
     };
 
     const onAudio = (data: ArrayBuffer) => {
       ensureAudioStreamer()
         .then(streamer => {
           streamer.addPCM16(new Uint8Array(data));
-          // Agent speaking — reset *any* activity but NOT user activity.
-          resetAnyActivity();
         })
         .catch(err => {
           console.error('Error handling output audio:', err);
@@ -397,10 +353,6 @@ export function useLiveApi({
     client.on('close', onClose);
     client.on('interrupted', stopAudioStreamer);
     client.on('audio', onAudio);
-    client.on('turncomplete', resetAnyActivity);
-    client.on('inputTranscription', resetUserActivity); // user spoke
-    client.on('outputTranscription', resetAnyActivity); // agent spoke
-    client.on('content', resetAnyActivity);
 
     const onSetupComplete = () => {
       const profile = useUserProfileStore.getState().profile;
@@ -466,13 +418,10 @@ export function useLiveApi({
         // Last-resort fallback: skip context, still greet
         sendGreeting();
       });
-      resetUserActivity();
     };
     client.on('setupcomplete', onSetupComplete);
 
     const onToolCall = async (toolCall: LiveServerToolCall) => {
-      // Tool call counts as user-driven activity — reset both timers.
-      resetUserActivity();
       const { setGeneratingTask } = useUI.getState();
       const processingStore = useProcessingStore.getState();
 
@@ -502,11 +451,10 @@ export function useLiveApi({
 
         // Sync trigger to Firebase
         try {
-          await safeAddDoc(db, 'turns', {
+          await safeAddDoc('turns', {
             user_id: getRuntimeUserIdentity().userId,
             role: 'system',
             text: triggerMessage,
-            timestamp: serverTimestamp(),
             type: 'tool_trigger',
           });
         } catch (e) {
@@ -647,11 +595,10 @@ export function useLiveApi({
             useLogStore.getState().addTurn({ role: 'system', text: responseMessage, isFinal: true });
 
             try {
-              await safeAddDoc(db, 'turns', {
+              await safeAddDoc('turns', {
                 user_id: getRuntimeUserIdentity().userId,
                 role: 'system',
                 text: responseMessage,
-                timestamp: serverTimestamp(),
                 type: 'tool_response',
               });
             } catch (e) {
@@ -694,11 +641,6 @@ export function useLiveApi({
       client.off('audio', onAudio);
       client.off('setupcomplete', onSetupComplete);
       client.off('toolcall', onToolCall);
-      client.off('turncomplete', resetAnyActivity);
-      client.off('inputTranscription', resetUserActivity);
-      client.off('outputTranscription', resetAnyActivity);
-      client.off('content', resetAnyActivity);
-      if (silenceTimer) clearInterval(silenceTimer);
     };
   }, [client, ensureAudioStreamer]);
 

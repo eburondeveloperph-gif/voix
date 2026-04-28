@@ -22,9 +22,7 @@
  *     about prior topics naturally.
  */
 
-import { db } from './firebase';
-import { collection, query, where, orderBy, limit as fsLimit, getDocs } from 'firebase/firestore';
-import { safeAddDoc } from './firestore-safe';
+import { supabase } from './supabase';
 import { getRuntimeUserIdentity } from './user-profile';
 
 // ─── Types ─────────────────────────────────────────────
@@ -66,7 +64,7 @@ interface HistorySummaryCache {
 const STORAGE_VERSION = 1;
 const HISTORY_KEY_PREFIX = `beatrice_conv_history_v${STORAGE_VERSION}_`;
 const SUMMARY_KEY_PREFIX = `beatrice_conv_history_summary_v${STORAGE_VERSION}_`;
-const FIRESTORE_HISTORY_COLLECTION = 'conversation_history';
+const HISTORY_COLLECTION = 'conversation_history';
 
 const LOCAL_TURN_CAP = 500;
 const SESSION_CONTEXT_TURN_LIMIT = 60; // how many recent turns to consider for the digest
@@ -145,59 +143,62 @@ function isValidUserId(userId: string | undefined | null): userId is string {
   return Boolean(userId && userId !== 'local-dev-user');
 }
 
-// ─── Firestore Sync ───────────────────────────────────
+// ─── Supabase Sync ───────────────────────────────────
 
-async function pushTurnToFirestore(turn: HistoryTurn): Promise<void> {
+async function pushTurnToSupabase(turn: HistoryTurn): Promise<void> {
   if (!isValidUserId(turn.userId)) return;
   try {
-    await safeAddDoc(db, FIRESTORE_HISTORY_COLLECTION, {
-      user_id: turn.userId,
-      role: turn.role,
-      text: turn.text,
-      timestamp: turn.timestamp,
-      source: turn.source,
-      session_id: turn.sessionId ?? null,
-      client_id: turn.id,
-    });
+    const { error } = await supabase
+      .from('conversation_history')
+      .insert({
+        user_id: turn.userId,
+        role: turn.role,
+        text: turn.text,
+        timestamp: turn.timestamp,
+        source: turn.source,
+        session_id: turn.sessionId ?? null,
+        client_id: turn.id,
+      });
+    if (error) {
+      console.warn('Conversation history Supabase push failed:', error);
+    }
   } catch (e) {
-    console.warn('Conversation history Firestore push failed:', e);
+    console.warn('Conversation history Supabase push failed:', e);
   }
 }
 
-async function fetchTurnsFromFirestore(
+async function fetchTurnsFromSupabase(
   userId: string,
   maxTurns: number,
 ): Promise<HistoryTurn[]> {
   if (!isValidUserId(userId)) return [];
   try {
-    const q = query(
-      collection(db, FIRESTORE_HISTORY_COLLECTION),
-      where('user_id', '==', userId),
-      orderBy('timestamp', 'desc'),
-      fsLimit(maxTurns),
-    );
-    const snap = await getDocs(q);
-    const remote: HistoryTurn[] = [];
-    snap.forEach(doc => {
-      const data = doc.data() as any;
-      const ts = typeof data.timestamp === 'number'
-        ? data.timestamp
-        : data.timestamp?.toMillis?.() ?? Date.now();
-      remote.push({
-        id: data.client_id || `remote_${doc.id}`,
-        userId: data.user_id || userId,
-        role: (data.role as HistoryRole) || 'user',
-        text: String(data.text ?? ''),
-        timestamp: ts,
-        source: (data.source as HistorySource) || 'voice',
-        sessionId: data.session_id || undefined,
-      });
-    });
+    const { data, error } = await supabase
+      .from('conversation_history')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: false })
+      .limit(maxTurns);
+
+    if (error) {
+      console.warn('Conversation history Supabase fetch failed:', error);
+      return [];
+    }
+
+    const remote: HistoryTurn[] = (data || []).map(row => ({
+      id: row.client_id || `remote_${row.id}`,
+      userId: row.user_id || userId,
+      role: (row.role as HistoryRole) || 'user',
+      text: String(row.text ?? ''),
+      timestamp: typeof row.timestamp === 'number' ? row.timestamp : Date.now(),
+      source: (row.source as HistorySource) || 'voice',
+      sessionId: row.session_id || undefined,
+    }));
     // ascending order so it slots into the local list naturally
     remote.sort((a, b) => a.timestamp - b.timestamp);
     return remote;
   } catch (e) {
-    console.warn('Conversation history Firestore fetch failed:', e);
+    console.warn('Conversation history Supabase fetch failed:', e);
     return [];
   }
 }
@@ -247,9 +248,9 @@ export async function recordTurn(
     writeLocalTurns(userId, local);
   }
 
-  // Mirror to Firestore (best-effort, async)
+  // Mirror to Supabase (best-effort, async)
   if (!options.skipRemote) {
-    void pushTurnToFirestore(turn);
+    void pushTurnToSupabase(turn);
   }
 
   return turn;
@@ -269,17 +270,17 @@ export function getRecentTurns(
 }
 
 /**
- * Pulls the last N turns from Firestore and merges them into the local cache.
+ * Pulls the last N turns from Supabase and merges them into the local cache.
  * Use when the local cache is empty (e.g. user just logged in on a new device).
  */
-export async function syncHistoryFromFirestore(
+export async function syncHistoryFromSupabase(
   userId?: string,
   maxTurns: number = LOCAL_TURN_CAP,
 ): Promise<HistoryTurn[]> {
   const id = userId || getRuntimeUserIdentity().userId;
   if (!isValidUserId(id)) return readLocalTurns(id);
 
-  const remote = await fetchTurnsFromFirestore(id, maxTurns);
+  const remote = await fetchTurnsFromSupabase(id, maxTurns);
   if (remote.length === 0) return readLocalTurns(id);
 
   const local = readLocalTurns(id);
@@ -401,7 +402,7 @@ export interface LoadHistoryOptions {
  * at the start of a session. Returns "" if there's no usable history yet.
  *
  * Strategy:
- *   1. Sync recent turns from Firestore into the local cache.
+ *   1. Sync recent turns from Supabase into the local cache.
  *   2. If we have a fresh cached digest covering the latest turn, use it.
  *   3. Otherwise compress the last N turns with Gemini (or list verbatim if
  *      we have very few turns / no API key).
@@ -415,7 +416,7 @@ export async function loadHistoryContextForSession(
   // Best-effort sync from cloud (no-op for local-dev-user)
   if (isValidUserId(userId)) {
     try {
-      await syncHistoryFromFirestore(userId, LOCAL_TURN_CAP);
+      await syncHistoryFromSupabase(userId, LOCAL_TURN_CAP);
     } catch {
       // Cloud sync is best-effort
     }

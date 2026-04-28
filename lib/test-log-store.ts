@@ -2,9 +2,8 @@
  * Test Log Store - AI/Dev conversation logging for debugging and improvement
  */
 import { create } from 'zustand';
-import { collection, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { db, isFirestoreRemoteEnabled } from './firebase';
-import { safeAddDoc, safeGetDocs } from './firestore-safe';
+import { supabase } from './supabase';
+import { safeAddDoc, safeGetDocs, isFirestoreRemoteEnabled } from './firestore-safe';
 
 export type TestLogEntryType = 'user' | 'ai' | 'dev' | 'system' | 'error';
 
@@ -106,24 +105,41 @@ export const useTestLogStore = create<TestLogState>((set, get) => ({
       : sessions;
     
     for (const session of sessionsToSave) {
-      const sessionRef = await safeAddDoc(db, 'testLogs', {
-        title: session.title,
-        userId,
-        sessionId: session.id,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        entryCount: session.entries.length,
-      });
-      if (!sessionRef) continue;
+      const sessionId = generateSessionId();
       
-      // Save entries as subcollection
-      for (const entry of session.entries) {
-        await safeAddDoc(db, `testLogs/${sessionRef.id}/entries`, {
-          type: entry.type,
-          content: entry.content,
-          metadata: entry.metadata || {},
-          timestamp: serverTimestamp(),
+      // Save the session metadata
+      const { error: sessionError } = await supabase
+        .from('test_logs')
+        .insert({
+          id: sessionId,
+          title: session.title,
+          user_id: userId,
+          session_id: session.id,
+          entry_count: session.entries.length,
         });
+      
+      if (sessionError) {
+        console.warn('Failed to save test log session:', sessionError);
+        continue;
+      }
+      
+      // Save entries as individual rows linked by session_id
+      if (session.entries.length > 0) {
+        const { error: entriesError } = await supabase
+          .from('test_log_entries')
+          .insert(
+            session.entries.map(entry => ({
+              id: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              session_id: sessionId,
+              type: entry.type,
+              content: entry.content,
+              metadata: entry.metadata || {},
+            }))
+          );
+        
+        if (entriesError) {
+          console.warn('Failed to save test log entries:', entriesError);
+        }
       }
     }
     
@@ -137,39 +153,47 @@ export const useTestLogStore = create<TestLogState>((set, get) => ({
       return;
     }
 
-    const q = query(
-      collection(db, 'testLogs'),
-      orderBy('createdAt', 'desc')
-    );
-    
-    const snapshot = await safeGetDocs(q);
-    if (!snapshot) return;
+    const { data: sessionRows, error: sessionError } = await supabase
+      .from('test_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (sessionError || !sessionRows) {
+      console.warn('Failed to load test log sessions:', sessionError);
+      return;
+    }
 
     const sessions: TestLogSession[] = [];
     
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      if (data.userId === userId) {
-        // Load entries for this session
-        const entriesSnapshot = await safeGetDocs(collection(db, 'testLogs', doc.id, 'entries') as any);
-        if (!entriesSnapshot) continue;
-        
-        const entries: TestLogEntry[] = entriesSnapshot.docs.map(entryDoc => ({
-          id: entryDoc.id,
-          type: entryDoc.data().type,
-          content: entryDoc.data().content,
-          metadata: entryDoc.data().metadata,
-          timestamp: entryDoc.data().timestamp?.toDate(),
-        }));
-        
-        sessions.push({
-          id: data.sessionId,
-          title: data.title,
-          entries,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-        });
+    for (const row of sessionRows) {
+      // Load entries for this session
+      const { data: entryRows, error: entriesError } = await supabase
+        .from('test_log_entries')
+        .select('*')
+        .eq('session_id', row.id)
+        .order('created_at', { ascending: true });
+
+      if (entriesError) {
+        console.warn('Failed to load entries for session:', row.id, entriesError);
+        continue;
       }
+
+      const entries: TestLogEntry[] = (entryRows || []).map(entry => ({
+        id: entry.id,
+        type: entry.type as TestLogEntryType,
+        content: entry.content,
+        metadata: entry.metadata as Record<string, unknown> | undefined,
+        timestamp: new Date(entry.created_at),
+      }));
+      
+      sessions.push({
+        id: row.session_id,
+        title: row.title,
+        entries,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      });
     }
     
     set({ sessions });

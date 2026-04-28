@@ -10,8 +10,7 @@
  */
 
 import { getEffectiveUserId, createId, nowIso } from './document/utils';
-import { db } from './firebase';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
+import { supabase } from './supabase';
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -110,48 +109,84 @@ function simpleTextScore(query: string, text: string): number {
   return matchCount / queryWords.length * 0.7;
 }
 
-// ─── Firestore Sync ────────────────────────────────────
+// ─── Supabase Sync ─────────────────────────────────────
 
-const FIRESTORE_COLLECTION = 'conversation_memories';
+const SUPABASE_TABLE = 'conversation_memories';
 
-async function syncToFirestore(memory: ConversationMemoryRecord): Promise<void> {
+function toDbRow(memory: ConversationMemoryRecord): Record<string, unknown> {
+  return {
+    id: memory.id,
+    user_id: memory.userId,
+    fact: memory.fact,
+    category: memory.category,
+    importance: memory.importance,
+    created_at: memory.createdAt,
+    last_accessed_at: memory.lastAccessedAt,
+    access_count: memory.accessCount,
+    tags: memory.tags,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbRow(row: Record<string, unknown>): ConversationMemoryRecord {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    fact: String(row.fact),
+    category: String(row.category || 'general'),
+    importance: (row.importance as ConversationMemoryRecord['importance']) || 'medium',
+    createdAt: String(row.created_at || row.createdAt),
+    lastAccessedAt: String(row.last_accessed_at || row.lastAccessedAt),
+    accessCount: Number(row.access_count || row.accessCount || 0),
+    tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+  };
+}
+
+async function syncToSupabase(memory: ConversationMemoryRecord): Promise<void> {
   if (!memory.userId || memory.userId === 'local-dev-user') return;
   try {
-    const docRef = doc(db, FIRESTORE_COLLECTION, memory.id);
-    await setDoc(docRef, {
-      ...memory,
-      serverTimestamp: new Date().toISOString(),
-    });
+    const { error } = await supabase
+      .from(SUPABASE_TABLE)
+      .upsert(toDbRow(memory), { onConflict: 'id' });
+    if (error) console.warn('Supabase sync failed for conversation memory:', error.message);
   } catch (e) {
-    console.warn('Firestore sync failed for conversation memory:', e);
+    console.warn('Supabase sync failed for conversation memory:', e);
   }
 }
 
-async function deleteFromFirestore(memoryId: string, userId: string): Promise<void> {
+async function deleteFromSupabase(memoryId: string, userId: string): Promise<void> {
   if (userId === 'local-dev-user') return;
   try {
-    await deleteDoc(doc(db, FIRESTORE_COLLECTION, memoryId));
+    const { error } = await supabase
+      .from(SUPABASE_TABLE)
+      .delete()
+      .eq('id', memoryId);
+    if (error) console.warn('Supabase delete failed for conversation memory:', error.message);
   } catch (e) {
-    console.warn('Firestore delete failed for conversation memory:', e);
+    console.warn('Supabase delete failed for conversation memory:', e);
   }
 }
 
-async function syncFromFirestore(userId: string): Promise<ConversationMemoryRecord[]> {
+async function syncFromSupabase(userId: string): Promise<ConversationMemoryRecord[]> {
   if (userId === 'local-dev-user') return [];
   try {
-    const q = query(
-      collection(db, FIRESTORE_COLLECTION),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(LOCAL_MEMORY_LIMIT),
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data() as ConversationMemoryRecord);
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE)
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(LOCAL_MEMORY_LIMIT);
+    if (error) {
+      console.warn('Supabase sync-from failed for conversation memory:', error.message);
+      return [];
+    }
+    return (data || []).map(row => fromDbRow(row as unknown as Record<string, unknown>));
   } catch (e) {
-    console.warn('Firestore sync-from failed for conversation memory:', e);
+    console.warn('Supabase sync-from failed for conversation memory:', e);
     return [];
   }
 }
+
 
 // ─── Public API ────────────────────────────────────────
 
@@ -190,7 +225,7 @@ export class ConversationMemory {
         createdAt: existing.createdAt,
         lastAccessedAt: now,
       };
-      await syncToFirestore(updatedRecord);
+      await syncToSupabase(updatedRecord);
       return updatedRecord;
     }
 
@@ -208,7 +243,7 @@ export class ConversationMemory {
 
     memories.push(memory);
     persistMemories(userId, memories);
-    await syncToFirestore(memory);
+    await syncToSupabase(memory);
 
     return memory;
   }
@@ -305,7 +340,7 @@ export class ConversationMemory {
 
     memories.splice(idx, 1);
     persistMemories(userId, memories);
-    await deleteFromFirestore(memoryId, userId);
+    await deleteFromSupabase(memoryId, userId);
     return true;
   }
 
@@ -329,7 +364,7 @@ export class ConversationMemory {
     persistMemories(userId, remaining);
 
     for (const m of toDelete) {
-      await deleteFromFirestore(m.id, userId);
+      await deleteFromSupabase(m.id, userId);
     }
 
     return toDelete.length;
@@ -346,10 +381,10 @@ export class ConversationMemory {
     const userId = options?.userId || getEffectiveUserId();
     const limitCount = options?.limit || RECENT_MEMORY_SLOT_COUNT;
 
-    // Try to sync from Firestore first (for logged-in users)
+    // Try to sync from Supabase first (for logged-in users)
     if (userId !== 'local-dev-user') {
       try {
-        const remoteMemories = await syncFromFirestore(userId);
+        const remoteMemories = await syncFromSupabase(userId);
         if (remoteMemories.length > 0) {
           // Merge with local (remote wins)
           const localMemories = getPersistedMemories(userId);

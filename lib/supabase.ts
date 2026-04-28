@@ -242,6 +242,134 @@ export type Database = {
           updated_at?: string;
         };
       };
+      conversation_memories: {
+        Row: {
+          id: string;
+          user_id: string;
+          fact: string;
+          category: string;
+          importance: string;
+          created_at: string;
+          last_accessed_at: string;
+          access_count: number;
+          tags: string[];
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          fact: string;
+          category?: string;
+          importance?: string;
+          created_at?: string;
+          last_accessed_at?: string;
+          access_count?: number;
+          tags?: string[];
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          fact?: string;
+          category?: string;
+          importance?: string;
+          created_at?: string;
+          last_accessed_at?: string;
+          access_count?: number;
+          tags?: string[];
+          updated_at?: string;
+        };
+      };
+      conversation_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          role: string;
+          text: string;
+          timestamp: number;
+          source: string;
+          session_id: string | null;
+          client_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          role: string;
+          text: string;
+          timestamp: number;
+          source: string;
+          session_id?: string | null;
+          client_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          role?: string;
+          text?: string;
+          timestamp?: number;
+          source?: string;
+          session_id?: string | null;
+          client_id?: string;
+          created_at?: string;
+        };
+      };
+      test_logs: {
+        Row: {
+          id: string;
+          title: string;
+          user_id: string;
+          session_id: string;
+          created_at: string;
+          updated_at: string;
+          entry_count: number;
+        };
+        Insert: {
+          id: string;
+          title: string;
+          user_id: string;
+          session_id: string;
+          created_at?: string;
+          updated_at?: string;
+          entry_count?: number;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          user_id?: string;
+          session_id?: string;
+          created_at?: string;
+          updated_at?: string;
+          entry_count?: number;
+        };
+      };
+      test_log_entries: {
+        Row: {
+          id: string;
+          session_id: string;
+          type: string;
+          content: string;
+          metadata: unknown;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          session_id: string;
+          type: string;
+          content: string;
+          metadata?: unknown;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          type?: string;
+          content?: string;
+          metadata?: unknown;
+          created_at?: string;
+        };
+      };
     };
   };
 };
